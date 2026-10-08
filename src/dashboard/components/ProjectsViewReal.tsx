@@ -1,0 +1,1738 @@
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import {
+  Kanban,
+  ListFilter,
+  Plus,
+  Clock,
+  AlertTriangle,
+  CheckCircle2,
+  Calendar,
+  DollarSign,
+  User,
+  Layers,
+  Building,
+  CheckSquare,
+  Square,
+  Trash2,
+  Edit3,
+  X,
+  Search,
+  Filter,
+  RefreshCw,
+  ExternalLink,
+  ChevronRight,
+  Code2,
+  Copy,
+  Check,
+  Flame,
+  ArrowRight,
+  TrendingUp,
+} from 'lucide-react';
+import {
+  ProjectItem,
+  ProjectStatus,
+  ProjectPriority,
+  ProjectTask,
+  PROJECT_STATUS_CONFIG,
+  PROJECT_PRIORITY_CONFIG,
+  fetchProjectsWithTasks,
+  createProjectRecord,
+  updateProjectStatus,
+  updateProjectRecord,
+  deleteProjectRecord,
+  addProjectTask,
+  toggleTaskCompletion,
+  deleteTaskRecord,
+  calculateProjectsMetrics,
+  formatProjectCurrency,
+  isProjectDelayed,
+  getDaysDelayed,
+} from '../../services/projectsService';
+import {
+  fetchClients,
+  fetchServicesCatalog,
+  fetchProfiles,
+  ClientEntity,
+  ServiceItem,
+  ProfileUser,
+} from '../../services/crmService';
+
+const KANBAN_STAGES: ProjectStatus[] = [
+  'BACKLOG',
+  'A FAZER',
+  'EM ANDAMENTO',
+  'AGUARDANDO CLIENTE',
+  'REVISÃO',
+  'CONCLUÍDO',
+];
+
+export function ProjectsViewReal() {
+  // State
+  const [projects, setProjects] = useState<ProjectItem[]>([]);
+  const [clients, setClients] = useState<ClientEntity[]>([]);
+  const [services, setServices] = useState<ServiceItem[]>([]);
+  const [profiles, setProfiles] = useState<ProfileUser[]>([]);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
+
+  // View Mode
+  const [viewMode, setViewMode] = useState<'kanban' | 'list'>('kanban');
+
+  // Filters & Search
+  const [searchTerm, setSearchTerm] = useState<string>('');
+  const [priorityFilter, setPriorityFilter] = useState<string>('ALL');
+  const [delayedOnly, setDelayedOnly] = useState<boolean>(false);
+  const [responsibleFilter, setResponsibleFilter] = useState<string>('ALL');
+
+  // Modals
+  const [isNewProjectModalOpen, setIsNewProjectModalOpen] = useState<boolean>(false);
+  const [selectedProject, setSelectedProject] = useState<ProjectItem | null>(null);
+  const [isEditModalOpen, setIsEditModalOpen] = useState<boolean>(false);
+  const [isSqlModalOpen, setIsSqlModalOpen] = useState<boolean>(false);
+  const [sqlCopied, setSqlCopied] = useState<boolean>(false);
+
+  // Drag and drop state
+  const [draggedProjectId, setDraggedProjectId] = useState<string | null>(null);
+  const [dragOverColumn, setDragOverColumn] = useState<ProjectStatus | null>(null);
+
+  // Quick task input in detail drawer
+  const [newQuickTaskTitle, setNewQuickTaskTitle] = useState<string>('');
+  const [isAddingTask, setIsAddingTask] = useState<boolean>(false);
+
+  // -------------------------------------------------------------
+  // CARREGAR DADOS
+  // -------------------------------------------------------------
+  const loadData = useCallback(async (showRefreshing = false) => {
+    if (showRefreshing) setIsRefreshing(true);
+    else setIsLoading(true);
+
+    try {
+      const [projectsData, clientsData, servicesData, profilesData] = await Promise.all([
+        fetchProjectsWithTasks(),
+        fetchClients(),
+        fetchServicesCatalog(),
+        fetchProfiles(),
+      ]);
+
+      setProjects(projectsData);
+      setClients(clientsData);
+      setServices(servicesData);
+      setProfiles(profilesData);
+    } catch (err) {
+      console.error('Erro ao carregar módulo de projetos:', err);
+    } finally {
+      setIsLoading(false);
+      setIsRefreshing(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  // Keep selectedProject in sync when projects change
+  useEffect(() => {
+    if (selectedProject) {
+      const updated = projects.find((p) => p.id === selectedProject.id);
+      if (updated) {
+        setSelectedProject(updated);
+      }
+    }
+  }, [projects, selectedProject]);
+
+  // Metrics
+  const metrics = useMemo(() => calculateProjectsMetrics(projects), [projects]);
+
+  // Filtered projects
+  const filteredProjects = useMemo(() => {
+    return projects.filter((p) => {
+      // Search
+      if (searchTerm.trim()) {
+        const query = searchTerm.toLowerCase();
+        const matchesName = p.name.toLowerCase().includes(query);
+        const matchesClient = (p.client_name || '').toLowerCase().includes(query);
+        const matchesService = (p.service_name || '').toLowerCase().includes(query);
+        const matchesResp = (p.responsible_name || '').toLowerCase().includes(query);
+        if (!matchesName && !matchesClient && !matchesService && !matchesResp) {
+          return false;
+        }
+      }
+
+      // Priority
+      if (priorityFilter !== 'ALL' && p.priority !== priorityFilter) {
+        return false;
+      }
+
+      // Delayed only
+      if (delayedOnly && !p.is_delayed) {
+        return false;
+      }
+
+      // Responsible
+      if (responsibleFilter !== 'ALL') {
+        if (p.responsible_user_id !== responsibleFilter && p.responsible_name !== responsibleFilter) {
+          return false;
+        }
+      }
+
+      return true;
+    });
+  }, [projects, searchTerm, priorityFilter, delayedOnly, responsibleFilter]);
+
+  // Group by status for Kanban
+  const kanbanColumns = useMemo(() => {
+    const map: Record<ProjectStatus, ProjectItem[]> = {
+      BACKLOG: [],
+      'A FAZER': [],
+      'EM ANDAMENTO': [],
+      'AGUARDANDO CLIENTE': [],
+      REVISÃO: [],
+      CONCLUÍDO: [],
+    };
+
+    filteredProjects.forEach((p) => {
+      if (map[p.status]) {
+        map[p.status].push(p);
+      } else {
+        map['A FAZER'].push(p);
+      }
+    });
+
+    return map;
+  }, [filteredProjects]);
+
+  // -------------------------------------------------------------
+  // HANDLERS: DRAG AND DROP
+  // -------------------------------------------------------------
+  const handleDragStart = (e: React.DragEvent, projectId: string) => {
+    e.dataTransfer.setData('text/plain', projectId);
+    setDraggedProjectId(projectId);
+  };
+
+  const handleDragOver = (e: React.DragEvent, status: ProjectStatus) => {
+    e.preventDefault();
+    if (dragOverColumn !== status) {
+      setDragOverColumn(status);
+    }
+  };
+
+  const handleDragLeave = () => {
+    setDragOverColumn(null);
+  };
+
+  const handleDrop = async (e: React.DragEvent, targetStatus: ProjectStatus) => {
+    e.preventDefault();
+    setDragOverColumn(null);
+    const projectId = e.dataTransfer.getData('text/plain') || draggedProjectId;
+    if (!projectId) return;
+
+    const currentProject = projects.find((p) => p.id === projectId);
+    if (!currentProject || currentProject.status === targetStatus) return;
+
+    // Optimistic update
+    const previousProjects = [...projects];
+    setProjects((prev) =>
+      prev.map((p) =>
+        p.id === projectId
+          ? {
+              ...p,
+              status: targetStatus,
+              is_delayed: isProjectDelayed(p.deadline, targetStatus),
+            }
+          : p
+      )
+    );
+
+    const success = await updateProjectStatus(projectId, targetStatus);
+    if (!success) {
+      // Revert if failed
+      setProjects(previousProjects);
+    } else {
+      // Refresh background quietly
+      loadData(false);
+    }
+    setDraggedProjectId(null);
+  };
+
+  // -------------------------------------------------------------
+  // HANDLERS: TASKS
+  // -------------------------------------------------------------
+  const handleToggleTask = async (projectId: string, taskId: string, currentCompleted: boolean) => {
+    // Optimistic toggle
+    setProjects((prev) =>
+      prev.map((proj) => {
+        if (proj.id !== projectId) return proj;
+        const updatedTasks = proj.tasks.map((t) =>
+          t.id === taskId ? { ...t, completed: !currentCompleted } : t
+        );
+        const compCount = updatedTasks.filter((t) => t.completed).length;
+        const totCount = updatedTasks.length;
+        return {
+          ...proj,
+          tasks: updatedTasks,
+          tasks_completed: compCount,
+          tasks_total: totCount,
+          progress_percent: totCount > 0 ? Math.round((compCount / totCount) * 100) : 0,
+        };
+      })
+    );
+
+    await toggleTaskCompletion(taskId, currentCompleted);
+  };
+
+  const handleAddNewTaskToProject = async (projectId: string) => {
+    if (!newQuickTaskTitle.trim()) return;
+    setIsAddingTask(true);
+    const title = newQuickTaskTitle.trim();
+    setNewQuickTaskTitle('');
+
+    const created = await addProjectTask(projectId, title, selectedProject?.responsible_user_id);
+    if (created) {
+      setProjects((prev) =>
+        prev.map((proj) => {
+          if (proj.id !== projectId) return proj;
+          const updatedTasks = [...proj.tasks, created];
+          const compCount = updatedTasks.filter((t) => t.completed).length;
+          const totCount = updatedTasks.length;
+          return {
+            ...proj,
+            tasks: updatedTasks,
+            tasks_completed: compCount,
+            tasks_total: totCount,
+            progress_percent: totCount > 0 ? Math.round((compCount / totCount) * 100) : 0,
+          };
+        })
+      );
+    }
+    setIsAddingTask(false);
+  };
+
+  const handleDeleteTask = async (projectId: string, taskId: string) => {
+    // Optimistic
+    setProjects((prev) =>
+      prev.map((proj) => {
+        if (proj.id !== projectId) return proj;
+        const updatedTasks = proj.tasks.filter((t) => t.id !== taskId);
+        const compCount = updatedTasks.filter((t) => t.completed).length;
+        const totCount = updatedTasks.length;
+        return {
+          ...proj,
+          tasks: updatedTasks,
+          tasks_completed: compCount,
+          tasks_total: totCount,
+          progress_percent: totCount > 0 ? Math.round((compCount / totCount) * 100) : 0,
+        };
+      })
+    );
+
+    await deleteTaskRecord(taskId);
+  };
+
+  // -------------------------------------------------------------
+  // HANDLERS: PROJECT ACTIONS
+  // -------------------------------------------------------------
+  const handleMarkProjectCompleted = async (projectId: string) => {
+    const success = await updateProjectStatus(projectId, 'CONCLUÍDO');
+    if (success) {
+      setProjects((prev) =>
+        prev.map((p) =>
+          p.id === projectId ? { ...p, status: 'CONCLUÍDO', is_delayed: false } : p
+        )
+      );
+      if (selectedProject?.id === projectId) {
+        setSelectedProject((prev) =>
+          prev ? { ...prev, status: 'CONCLUÍDO', is_delayed: false } : null
+        );
+      }
+    }
+  };
+
+  const handleDeleteProject = async (projectId: string) => {
+    if (!window.confirm('Tem certeza que deseja excluir este projeto e todas as suas tarefas?')) {
+      return;
+    }
+    const success = await deleteProjectRecord(projectId);
+    if (success) {
+      setProjects((prev) => prev.filter((p) => p.id !== projectId));
+      if (selectedProject?.id === projectId) {
+        setSelectedProject(null);
+      }
+    }
+  };
+
+  // Copy SQL Helper
+  const handleCopySql = () => {
+    const sqlContent = `-- ==============================================================================
+-- VULTO LAB — CORE OS: MÓDULO PROJETOS & ENTREGAS (SPRINT DELIVERY)
+-- ==============================================================================
+CREATE TABLE IF NOT EXISTS public.projects (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name TEXT NOT NULL,
+    client_id UUID REFERENCES public.clients(id) ON DELETE SET NULL,
+    service_id UUID REFERENCES public.services(id) ON DELETE SET NULL,
+    description TEXT,
+    responsible_user_id UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
+    status TEXT NOT NULL DEFAULT 'A FAZER',
+    priority TEXT NOT NULL DEFAULT 'Normal',
+    start_date DATE DEFAULT CURRENT_DATE,
+    deadline DATE,
+    value NUMERIC(12, 2) DEFAULT 0.00,
+    notes TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS public.project_tasks (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    project_id UUID NOT NULL REFERENCES public.projects(id) ON DELETE CASCADE,
+    title TEXT NOT NULL,
+    completed BOOLEAN NOT NULL DEFAULT false,
+    responsible_user_id UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+ALTER TABLE public.projects ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.project_tasks ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Allow authenticated read on projects" ON public.projects FOR SELECT TO authenticated USING (true);
+CREATE POLICY "Allow authenticated insert on projects" ON public.projects FOR INSERT TO authenticated WITH CHECK (true);
+CREATE POLICY "Allow authenticated update on projects" ON public.projects FOR UPDATE TO authenticated USING (true);
+CREATE POLICY "Allow authenticated delete on projects" ON public.projects FOR DELETE TO authenticated USING (true);
+
+CREATE POLICY "Allow authenticated read on project_tasks" ON public.project_tasks FOR SELECT TO authenticated USING (true);
+CREATE POLICY "Allow authenticated insert on project_tasks" ON public.project_tasks FOR INSERT TO authenticated WITH CHECK (true);
+CREATE POLICY "Allow authenticated update on project_tasks" ON public.project_tasks FOR UPDATE TO authenticated USING (true);
+CREATE POLICY "Allow authenticated delete on project_tasks" ON public.project_tasks FOR DELETE TO authenticated USING (true);`;
+
+    navigator.clipboard.writeText(sqlContent);
+    setSqlCopied(true);
+    setTimeout(() => setSqlCopied(false), 2500);
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* ------------------------------------------------------------- */}
+      {/* HEADER PRINCIPAL */}
+      {/* ------------------------------------------------------------- */}
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-[#111111] border border-white/10 p-5">
+        <div>
+          <div className="flex items-center gap-2 mb-1">
+            <span className="text-[10px] font-mono tracking-widest text-[#C6FF00] uppercase">
+              // SPRINT DELIVERY & PROJETOS
+            </span>
+            <span className="text-white/20">•</span>
+            <span className="text-[10px] font-mono text-white/50 uppercase">
+              OPERAÇÃO TÉCNICA VULTO LAB
+            </span>
+          </div>
+          <h1 className="text-xl sm:text-2xl font-bold font-mono text-white tracking-tight">
+            Gestão de Projetos & Entregas
+          </h1>
+          <p className="text-xs text-white/60 font-sans mt-0.5 max-w-2xl">
+            Acompanhe o ciclo de desenvolvimento, produção técnica e cronogramas de cada cliente.
+            Sincronizado em tempo real com o banco de dados Supabase.
+          </p>
+        </div>
+
+        {/* Top Actions */}
+        <div className="flex flex-wrap items-center gap-2.5">
+          {/* SQL Schema helper */}
+          <button
+            onClick={() => setIsSqlModalOpen(true)}
+            className="px-3 py-2 bg-white/5 hover:bg-white/10 text-white/80 hover:text-white border border-white/10 text-xs font-mono flex items-center gap-1.5 transition-colors cursor-pointer"
+            title="Ver comandos SQL para o Supabase"
+          >
+            <Code2 className="w-3.5 h-3.5 text-[#C6FF00]" />
+            <span className="hidden sm:inline">Script SQL</span>
+          </button>
+
+          {/* Refresh button */}
+          <button
+            onClick={() => loadData(true)}
+            disabled={isRefreshing}
+            className="px-3 py-2 bg-white/5 hover:bg-white/10 text-white/80 hover:text-white border border-white/10 text-xs font-mono flex items-center gap-1.5 transition-colors cursor-pointer"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin text-[#C6FF00]' : ''}`} />
+            <span className="hidden sm:inline">Atualizar</span>
+          </button>
+
+          {/* View Mode Toggle */}
+          <div className="flex bg-[#161616] border border-white/10 p-0.5">
+            <button
+              onClick={() => setViewMode('kanban')}
+              className={`px-3 py-1.5 text-xs font-mono flex items-center gap-1.5 transition-colors cursor-pointer ${
+                viewMode === 'kanban'
+                  ? 'bg-[#C6FF00] text-[#0A0A0A] font-bold'
+                  : 'text-white/60 hover:text-white'
+              }`}
+            >
+              <Kanban className="w-3.5 h-3.5" />
+              <span>KANBAN</span>
+            </button>
+            <button
+              onClick={() => setViewMode('list')}
+              className={`px-3 py-1.5 text-xs font-mono flex items-center gap-1.5 transition-colors cursor-pointer ${
+                viewMode === 'list'
+                  ? 'bg-[#C6FF00] text-[#0A0A0A] font-bold'
+                  : 'text-white/60 hover:text-white'
+              }`}
+            >
+              <ListFilter className="w-3.5 h-3.5" />
+              <span>LISTA</span>
+            </button>
+          </div>
+
+          {/* New Project Button */}
+          <button
+            onClick={() => setIsNewProjectModalOpen(true)}
+            className="px-4 py-2 bg-[#C6FF00] hover:bg-[#b0e600] text-[#0A0A0A] font-mono font-bold text-xs tracking-wider flex items-center gap-2 transition-colors cursor-pointer shadow-sm"
+          >
+            <Plus className="w-4 h-4 stroke-[2.5]" />
+            <span>NOVO PROJETO</span>
+          </button>
+        </div>
+      </div>
+
+      {/* ------------------------------------------------------------- */}
+      {/* CARDS DE RESUMO OPERACIONAL */}
+      {/* ------------------------------------------------------------- */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+        {/* Total Projetos */}
+        <div className="bg-[#111111] border border-white/10 p-3.5">
+          <div className="text-[10px] font-mono text-white/40 uppercase mb-1">Total Projetos</div>
+          <div className="text-xl font-bold font-mono text-white">{metrics.totalProjects}</div>
+          <div className="text-[10px] font-mono text-white/50 mt-1">Todas as demandas</div>
+        </div>
+
+        {/* Em Execução */}
+        <div className="bg-[#111111] border border-white/10 p-3.5">
+          <div className="text-[10px] font-mono text-amber-400/80 uppercase mb-1">Em Execução</div>
+          <div className="text-xl font-bold font-mono text-amber-400">{metrics.inProgressCount}</div>
+          <div className="text-[10px] font-mono text-white/50 mt-1">Sprints ativas</div>
+        </div>
+
+        {/* Atrasados Alerta */}
+        <div
+          className={`p-3.5 border transition-all ${
+            metrics.delayedCount > 0
+              ? 'bg-rose-950/20 border-rose-600/50 text-rose-300'
+              : 'bg-[#111111] border-white/10 text-white'
+          }`}
+        >
+          <div className="flex items-center justify-between text-[10px] font-mono uppercase mb-1">
+            <span className={metrics.delayedCount > 0 ? 'text-rose-400 font-bold' : 'text-white/40'}>
+              Atrasados
+            </span>
+            {metrics.delayedCount > 0 && <AlertTriangle className="w-3.5 h-3.5 text-rose-400 animate-pulse" />}
+          </div>
+          <div className={`text-xl font-bold font-mono ${metrics.delayedCount > 0 ? 'text-rose-400' : ''}`}>
+            {metrics.delayedCount}
+          </div>
+          <div className="text-[10px] font-mono text-white/50 mt-1">
+            {metrics.delayedCount > 0 ? 'Exigem ação imediata' : 'Nenhum atraso'}
+          </div>
+        </div>
+
+        {/* Concluídos */}
+        <div className="bg-[#111111] border border-white/10 p-3.5">
+          <div className="text-[10px] font-mono text-[#C6FF00]/80 uppercase mb-1">Concluídos</div>
+          <div className="text-xl font-bold font-mono text-[#C6FF00]">{metrics.completedCount}</div>
+          <div className="text-[10px] font-mono text-white/50 mt-1">Entregas finalizadas</div>
+        </div>
+
+        {/* Valor em Execução */}
+        <div className="bg-[#111111] border border-white/10 p-3.5">
+          <div className="text-[10px] font-mono text-white/40 uppercase mb-1">Pipeline Valor</div>
+          <div className="text-xl font-bold font-mono text-white">
+            {formatProjectCurrency(metrics.totalPipelineValue)}
+          </div>
+          <div className="text-[10px] font-mono text-white/50 mt-1">Em produção ativa</div>
+        </div>
+
+        {/* Tarefas Entregues */}
+        <div className="bg-[#111111] border border-white/10 p-3.5">
+          <div className="text-[10px] font-mono text-white/40 uppercase mb-1">Taxa de Tarefas</div>
+          <div className="text-xl font-bold font-mono text-white">
+            {metrics.totalTasksCount > 0
+              ? `${Math.round((metrics.completedTasksCount / metrics.totalTasksCount) * 100)}%`
+              : '0%'}
+          </div>
+          <div className="text-[10px] font-mono text-white/50 mt-1">
+            {metrics.completedTasksCount}/{metrics.totalTasksCount} etapas
+          </div>
+        </div>
+      </div>
+
+      {/* ------------------------------------------------------------- */}
+      {/* BARRA DE FILTROS & BUSCA */}
+      {/* ------------------------------------------------------------- */}
+      <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 bg-[#111111] border border-white/10 p-3">
+        {/* Search input */}
+        <div className="relative flex-1">
+          <Search className="w-4 h-4 text-white/40 absolute left-3 top-1/2 -translate-y-1/2" />
+          <input
+            type="text"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            placeholder="Buscar por projeto, cliente, serviço ou responsável..."
+            className="w-full bg-[#161616] border border-white/10 pl-9 pr-4 py-2 text-xs font-mono text-white placeholder-white/40 focus:outline-none focus:border-[#C6FF00]"
+          />
+          {searchTerm && (
+            <button
+              onClick={() => setSearchTerm('')}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-white/40 hover:text-white"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
+
+        {/* Quick Filters */}
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Priority filter */}
+          <div className="flex items-center gap-1.5 bg-[#161616] border border-white/10 px-2.5 py-1.5">
+            <span className="text-[10px] font-mono text-white/40">Prioridade:</span>
+            <select
+              value={priorityFilter}
+              onChange={(e) => setPriorityFilter(e.target.value)}
+              className="bg-transparent text-xs font-mono text-white focus:outline-none cursor-pointer"
+            >
+              <option value="ALL" className="bg-[#161616]">Todas</option>
+              <option value="Baixa" className="bg-[#161616]">Baixa</option>
+              <option value="Normal" className="bg-[#161616]">Normal</option>
+              <option value="Alta" className="bg-[#161616]">Alta</option>
+              <option value="Urgente" className="bg-[#161616]">Urgente</option>
+            </select>
+          </div>
+
+          {/* Responsible filter */}
+          <div className="flex items-center gap-1.5 bg-[#161616] border border-white/10 px-2.5 py-1.5">
+            <span className="text-[10px] font-mono text-white/40">Líder:</span>
+            <select
+              value={responsibleFilter}
+              onChange={(e) => setResponsibleFilter(e.target.value)}
+              className="bg-transparent text-xs font-mono text-white focus:outline-none cursor-pointer"
+            >
+              <option value="ALL" className="bg-[#161616]">Todos</option>
+              {profiles.map((p) => (
+                <option key={p.id} value={p.id} className="bg-[#161616]">
+                  {p.full_name || p.email}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Delayed only toggle */}
+          <button
+            onClick={() => setDelayedOnly(!delayedOnly)}
+            className={`px-2.5 py-1.5 text-xs font-mono flex items-center gap-1.5 border transition-colors cursor-pointer ${
+              delayedOnly
+                ? 'bg-rose-950/40 border-rose-600/70 text-rose-300 font-bold'
+                : 'bg-[#161616] border-white/10 text-white/60 hover:text-white'
+            }`}
+          >
+            <AlertTriangle className={`w-3.5 h-3.5 ${delayedOnly ? 'text-rose-400' : 'text-white/40'}`} />
+            <span>Apenas Atrasados</span>
+          </button>
+        </div>
+      </div>
+
+      {/* ------------------------------------------------------------- */}
+      {/* VISUALIZAÇÃO: KANBAN */}
+      {/* ------------------------------------------------------------- */}
+      {viewMode === 'kanban' && (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3.5 overflow-x-auto pb-4">
+          {KANBAN_STAGES.map((stage) => {
+            const config = PROJECT_STATUS_CONFIG[stage];
+            const columnProjects = kanbanColumns[stage];
+            const columnValue = columnProjects.reduce((acc, curr) => acc + (curr.value || 0), 0);
+            const isTargetColumn = dragOverColumn === stage;
+
+            return (
+              <div
+                key={stage}
+                onDragOver={(e) => handleDragOver(e, stage)}
+                onDragLeave={handleDragLeave}
+                onDrop={(e) => handleDrop(e, stage)}
+                className={`bg-[#111111] border flex flex-col min-h-[580px] transition-all duration-200 ${
+                  isTargetColumn
+                    ? 'border-[#C6FF00] bg-[#141812]'
+                    : 'border-white/10 hover:border-white/20'
+                }`}
+              >
+                {/* Column Header */}
+                <div className="p-3 border-b border-white/10 bg-[#0E0E0E]">
+                  <div className="flex items-center justify-between gap-1 mb-1">
+                    <span className={`text-[11px] font-mono font-bold tracking-wider ${config.color}`}>
+                      {stage}
+                    </span>
+                    <span className="text-[10px] font-mono px-1.5 py-0.5 bg-white/10 text-white/70 font-semibold rounded-sm">
+                      {columnProjects.length}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between text-[10px] font-mono text-white/40">
+                    <span>Total coluna:</span>
+                    <span className="text-white/80 font-semibold">{formatProjectCurrency(columnValue)}</span>
+                  </div>
+                </div>
+
+                {/* Column Body / Cards */}
+                <div className="p-2 space-y-2.5 flex-1 overflow-y-auto">
+                  {columnProjects.length === 0 ? (
+                    <div className="h-32 flex flex-col items-center justify-center text-center p-3 border border-dashed border-white/5 text-white/30 text-[11px] font-mono">
+                      <span>Nenhum projeto</span>
+                      <span className="text-[9px] text-white/20 mt-0.5">Arraste para cá</span>
+                    </div>
+                  ) : (
+                    columnProjects.map((proj) => (
+                      <ProjectCardItem
+                        key={proj.id}
+                        project={proj}
+                        onDragStart={(e) => handleDragStart(e, proj.id)}
+                        onSelect={() => setSelectedProject(proj)}
+                        onToggleTask={(taskId, completed) =>
+                          handleToggleTask(proj.id, taskId, completed)
+                        }
+                      />
+                    ))
+                  )}
+                </div>
+
+                {/* Quick Add Button */}
+                <div className="p-2 border-t border-white/5 bg-[#0E0E0E]/50">
+                  <button
+                    onClick={() => {
+                      setIsNewProjectModalOpen(true);
+                    }}
+                    className="w-full py-1.5 px-2 bg-white/5 hover:bg-white/10 text-white/50 hover:text-white text-[11px] font-mono flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                  >
+                    <Plus className="w-3 h-3" />
+                    <span>Adicionar</span>
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* ------------------------------------------------------------- */}
+      {/* VISUALIZAÇÃO: LISTA */}
+      {/* ------------------------------------------------------------- */}
+      {viewMode === 'list' && (
+        <div className="bg-[#111111] border border-white/10 overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs font-mono">
+              <thead>
+                <tr className="border-b border-white/10 bg-[#0E0E0E] text-[10px] text-white/40 uppercase tracking-wider">
+                  <th className="py-3 px-4">Projeto</th>
+                  <th className="py-3 px-4">Cliente</th>
+                  <th className="py-3 px-4">Serviço</th>
+                  <th className="py-3 px-4">Líder</th>
+                  <th className="py-3 px-4">Status</th>
+                  <th className="py-3 px-4">Prioridade</th>
+                  <th className="py-3 px-4">Prazo / Entrega</th>
+                  <th className="py-3 px-4">Tarefas</th>
+                  <th className="py-3 px-4 text-right">Valor</th>
+                  <th className="py-3 px-4 text-right">Ações</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-white/5">
+                {filteredProjects.length === 0 ? (
+                  <tr>
+                    <td colSpan={10} className="py-12 text-center text-white/40 font-mono text-xs">
+                      Nenhum projeto encontrado com os filtros selecionados.
+                    </td>
+                  </tr>
+                ) : (
+                  filteredProjects.map((proj) => {
+                    const statusConf = PROJECT_STATUS_CONFIG[proj.status];
+                    const priorityConf = PROJECT_PRIORITY_CONFIG[proj.priority];
+
+                    return (
+                      <tr
+                        key={proj.id}
+                        className="hover:bg-white/[0.02] transition-colors cursor-pointer group"
+                        onClick={() => setSelectedProject(proj)}
+                      >
+                        {/* Nome do Projeto */}
+                        <td className="py-3 px-4">
+                          <div className="font-bold text-white group-hover:text-[#C6FF00] transition-colors flex items-center gap-2">
+                            <span>{proj.name}</span>
+                            {proj.is_delayed && (
+                              <span className="px-1.5 py-0.2 bg-rose-950/80 text-rose-300 border border-rose-600/70 text-[9px] font-bold">
+                                ATRASADO
+                              </span>
+                            )}
+                          </div>
+                          {proj.description && (
+                            <div className="text-[11px] text-white/50 truncate max-w-xs font-sans mt-0.5">
+                              {proj.description}
+                            </div>
+                          )}
+                        </td>
+
+                        {/* Cliente */}
+                        <td className="py-3 px-4 text-white/80">
+                          <span className="flex items-center gap-1.5">
+                            <Building className="w-3 h-3 text-white/30" />
+                            {proj.client_name}
+                          </span>
+                        </td>
+
+                        {/* Serviço */}
+                        <td className="py-3 px-4 text-white/70">
+                          <span className="flex items-center gap-1.5">
+                            <Layers className="w-3 h-3 text-[#C6FF00]/50" />
+                            {proj.service_name}
+                          </span>
+                        </td>
+
+                        {/* Responsável */}
+                        <td className="py-3 px-4 text-white/70">
+                          <span className="flex items-center gap-1.5">
+                            <User className="w-3 h-3 text-white/30" />
+                            {proj.responsible_name}
+                          </span>
+                        </td>
+
+                        {/* Status (dropdown rápido) */}
+                        <td className="py-3 px-4" onClick={(e) => e.stopPropagation()}>
+                          <select
+                            value={proj.status}
+                            onChange={async (e) => {
+                              const newSt = e.target.value as ProjectStatus;
+                              await updateProjectStatus(proj.id, newSt);
+                              setProjects((prev) =>
+                                prev.map((p) =>
+                                  p.id === proj.id
+                                    ? {
+                                        ...p,
+                                        status: newSt,
+                                        is_delayed: isProjectDelayed(p.deadline, newSt),
+                                      }
+                                    : p
+                                )
+                              );
+                            }}
+                            className={`px-2 py-1 text-[10px] font-bold border bg-[#161616] cursor-pointer focus:outline-none ${statusConf.badgeBg}`}
+                          >
+                            {KANBAN_STAGES.map((st) => (
+                              <option key={st} value={st} className="bg-[#161616] text-white">
+                                {st}
+                              </option>
+                            ))}
+                          </select>
+                        </td>
+
+                        {/* Prioridade */}
+                        <td className="py-3 px-4">
+                          <span
+                            className={`inline-flex items-center gap-1.5 px-2 py-0.5 text-[10px] font-bold ${priorityConf.badgeClass}`}
+                          >
+                            <span className={`w-1.5 h-1.5 rounded-full ${priorityConf.dotClass}`} />
+                            {proj.priority}
+                          </span>
+                        </td>
+
+                        {/* Prazo */}
+                        <td className="py-3 px-4">
+                          <div className="flex items-center gap-1.5">
+                            <Calendar className="w-3.5 h-3.5 text-white/40" />
+                            <span
+                              className={
+                                proj.is_delayed
+                                  ? 'text-rose-400 font-bold'
+                                  : 'text-white/80'
+                              }
+                            >
+                              {proj.deadline
+                                ? new Date(proj.deadline + 'T00:00:00').toLocaleDateString('pt-BR')
+                                : 'Sem data'}
+                            </span>
+                          </div>
+                          {proj.is_delayed && (
+                            <div className="text-[10px] text-rose-400/90 font-mono mt-0.5">
+                              {getDaysDelayed(proj.deadline)} dias de atraso
+                            </div>
+                          )}
+                        </td>
+
+                        {/* Tarefas */}
+                        <td className="py-3 px-4">
+                          <div className="w-28 space-y-1">
+                            <div className="flex justify-between text-[10px] text-white/60">
+                              <span>
+                                {proj.tasks_completed}/{proj.tasks_total}
+                              </span>
+                              <span className="text-[#C6FF00] font-bold">{proj.progress_percent}%</span>
+                            </div>
+                            <div className="h-1.5 w-full bg-[#1C1C1C] overflow-hidden">
+                              <div
+                                style={{ width: `${proj.progress_percent}%` }}
+                                className="h-full bg-[#C6FF00] transition-all"
+                              />
+                            </div>
+                          </div>
+                        </td>
+
+                        {/* Valor */}
+                        <td className="py-3 px-4 text-right font-bold text-white">
+                          {formatProjectCurrency(proj.value)}
+                        </td>
+
+                        {/* Ações */}
+                        <td className="py-3 px-4 text-right" onClick={(e) => e.stopPropagation()}>
+                          <div className="flex items-center justify-end gap-1.5">
+                            <button
+                              onClick={() => setSelectedProject(proj)}
+                              className="p-1.5 bg-white/5 hover:bg-white/10 text-white/70 hover:text-white transition-colors cursor-pointer"
+                              title="Ver detalhes"
+                            >
+                              <ChevronRight className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteProject(proj.id)}
+                              className="p-1.5 bg-rose-950/20 hover:bg-rose-950/50 text-rose-400 border border-rose-800/30 transition-colors cursor-pointer"
+                              title="Excluir projeto"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* ------------------------------------------------------------- */}
+      {/* DRAWER / MODAL: DETALHES DO PROJETO */}
+      {/* ------------------------------------------------------------- */}
+      {selectedProject && (
+        <div className="fixed inset-0 z-50 flex items-center justify-end bg-black/80 backdrop-blur-sm p-0 sm:p-4">
+          <div className="w-full sm:max-w-2xl h-full sm:h-[95vh] bg-[#111111] border sm:border border-white/10 flex flex-col justify-between overflow-hidden shadow-2xl">
+            {/* Drawer Header */}
+            <div className="p-5 border-b border-white/10 bg-[#0E0E0E] flex items-start justify-between gap-4">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <span
+                    className={`px-2 py-0.5 text-[10px] font-mono font-bold uppercase border ${
+                      PROJECT_STATUS_CONFIG[selectedProject.status].badgeBg
+                    }`}
+                  >
+                    {selectedProject.status}
+                  </span>
+                  <span
+                    className={`inline-flex items-center gap-1.5 px-2 py-0.5 text-[10px] font-mono font-bold ${
+                      PROJECT_PRIORITY_CONFIG[selectedProject.priority].badgeClass
+                    }`}
+                  >
+                    <span
+                      className={`w-1.5 h-1.5 rounded-full ${
+                        PROJECT_PRIORITY_CONFIG[selectedProject.priority].dotClass
+                      }`}
+                    />
+                    {selectedProject.priority}
+                  </span>
+                  {selectedProject.is_delayed && (
+                    <span className="px-2 py-0.5 bg-rose-950/90 text-rose-300 border border-rose-600 text-[10px] font-mono font-bold animate-pulse">
+                      ATRASADO ({getDaysDelayed(selectedProject.deadline)}d)
+                    </span>
+                  )}
+                </div>
+                <h2 className="text-lg font-mono font-bold text-white tracking-tight">
+                  {selectedProject.name}
+                </h2>
+                <div className="flex flex-wrap items-center gap-3 text-xs font-mono text-white/60">
+                  <span className="flex items-center gap-1">
+                    <Building className="w-3.5 h-3.5 text-white/30" />
+                    {selectedProject.client_name}
+                  </span>
+                  <span>•</span>
+                  <span className="flex items-center gap-1">
+                    <Layers className="w-3.5 h-3.5 text-[#C6FF00]" />
+                    {selectedProject.service_name}
+                  </span>
+                  <span>•</span>
+                  <span className="flex items-center gap-1 text-[#C6FF00] font-bold">
+                    <DollarSign className="w-3.5 h-3.5" />
+                    {formatProjectCurrency(selectedProject.value)}
+                  </span>
+                </div>
+              </div>
+
+              <button
+                onClick={() => setSelectedProject(null)}
+                className="p-1.5 bg-white/5 hover:bg-white/10 text-white/60 hover:text-white transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Drawer Body */}
+            <div className="p-5 overflow-y-auto space-y-6 flex-1 text-xs font-mono">
+              {/* Quick Status Bar */}
+              <div className="p-3 bg-[#161616] border border-white/5 space-y-2">
+                <div className="text-[10px] text-white/40 uppercase">Mudar Etapa do Fluxo:</div>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+                  {KANBAN_STAGES.map((st) => (
+                    <button
+                      key={st}
+                      onClick={async () => {
+                        await updateProjectStatus(selectedProject.id, st);
+                        setProjects((prev) =>
+                          prev.map((p) =>
+                            p.id === selectedProject.id
+                              ? {
+                                  ...p,
+                                  status: st,
+                                  is_delayed: isProjectDelayed(p.deadline, st),
+                                }
+                              : p
+                          )
+                        );
+                        setSelectedProject((prev) =>
+                          prev
+                            ? {
+                                ...prev,
+                                status: st,
+                                is_delayed: isProjectDelayed(prev.deadline, st),
+                              }
+                            : null
+                        );
+                      }}
+                      className={`p-1.5 text-[10px] text-center font-mono border transition-colors cursor-pointer ${
+                        selectedProject.status === st
+                          ? 'bg-[#C6FF00] text-[#0A0A0A] font-bold border-[#C6FF00]'
+                          : 'bg-[#1C1C1C] text-white/60 hover:text-white border-white/5'
+                      }`}
+                    >
+                      {st}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Informações Gerais Grid */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                <div className="p-3 bg-[#161616] border border-white/5">
+                  <div className="text-[10px] text-white/40 uppercase mb-0.5">Responsável</div>
+                  <div className="text-white font-bold flex items-center gap-1.5">
+                    <User className="w-3.5 h-3.5 text-white/30" />
+                    {selectedProject.responsible_name}
+                  </div>
+                </div>
+
+                <div className="p-3 bg-[#161616] border border-white/5">
+                  <div className="text-[10px] text-white/40 uppercase mb-0.5">Início da Demanda</div>
+                  <div className="text-white font-bold flex items-center gap-1.5">
+                    <Calendar className="w-3.5 h-3.5 text-white/30" />
+                    {selectedProject.start_date
+                      ? new Date(selectedProject.start_date + 'T00:00:00').toLocaleDateString('pt-BR')
+                      : 'Não informado'}
+                  </div>
+                </div>
+
+                <div className="p-3 bg-[#161616] border border-white/5">
+                  <div className="text-[10px] text-white/40 uppercase mb-0.5">Prazo de Entrega</div>
+                  <div
+                    className={`font-bold flex items-center gap-1.5 ${
+                      selectedProject.is_delayed ? 'text-rose-400' : 'text-white'
+                    }`}
+                  >
+                    <Clock className="w-3.5 h-3.5" />
+                    {selectedProject.deadline
+                      ? new Date(selectedProject.deadline + 'T00:00:00').toLocaleDateString('pt-BR')
+                      : 'Sem data'}
+                  </div>
+                </div>
+              </div>
+
+              {/* Descrição */}
+              {selectedProject.description && (
+                <div className="space-y-1.5">
+                  <div className="text-[10px] text-white/40 uppercase">Escopo / Descrição Técnica:</div>
+                  <div className="p-3 bg-[#161616] border border-white/5 text-white/80 font-sans leading-relaxed">
+                    {selectedProject.description}
+                  </div>
+                </div>
+              )}
+
+              {/* Notas e Observações */}
+              {selectedProject.notes && (
+                <div className="space-y-1.5">
+                  <div className="text-[10px] text-white/40 uppercase">Notas & Observações Internas:</div>
+                  <div className="p-3 bg-[#161616] border border-white/5 text-white/70 font-sans italic">
+                    "{selectedProject.notes}"
+                  </div>
+                </div>
+              )}
+
+              {/* ------------------------------------------------------------- */}
+              {/* LISTA DE TAREFAS / SUB-ENTREGAS */}
+              {/* ------------------------------------------------------------- */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] text-white/40 uppercase font-mono tracking-wider">
+                      Etapas & Checklist de Entrega
+                    </span>
+                    <span className="text-[10px] font-bold text-[#C6FF00] bg-[#C6FF00]/10 px-1.5 py-0.5">
+                      {selectedProject.tasks_completed}/{selectedProject.tasks_total} ({selectedProject.progress_percent}%)
+                    </span>
+                  </div>
+                </div>
+
+                {/* Progress bar */}
+                <div className="h-2 w-full bg-[#181818] overflow-hidden border border-white/5">
+                  <div
+                    style={{ width: `${selectedProject.progress_percent}%` }}
+                    className="h-full bg-[#C6FF00] transition-all duration-300"
+                  />
+                </div>
+
+                {/* Task items list */}
+                <div className="space-y-1.5">
+                  {selectedProject.tasks.map((task) => (
+                    <div
+                      key={task.id}
+                      className="flex items-center justify-between p-2.5 bg-[#161616] hover:bg-[#1A1A1A] border border-white/5 group transition-colors"
+                    >
+                      <button
+                        type="button"
+                        onClick={() =>
+                          handleToggleTask(selectedProject.id, task.id, task.completed)
+                        }
+                        className="flex items-center gap-2.5 text-left flex-1 cursor-pointer"
+                      >
+                        {task.completed ? (
+                          <CheckSquare className="w-4 h-4 text-[#C6FF00] shrink-0" />
+                        ) : (
+                          <Square className="w-4 h-4 text-white/30 group-hover:text-white/60 shrink-0" />
+                        )}
+                        <span
+                          className={`text-xs ${
+                            task.completed
+                              ? 'line-through text-white/40'
+                              : 'text-white/90 font-medium'
+                          }`}
+                        >
+                          {task.title}
+                        </span>
+                      </button>
+
+                      <button
+                        onClick={() => handleDeleteTask(selectedProject.id, task.id)}
+                        className="opacity-0 group-hover:opacity-100 p-1 text-white/30 hover:text-rose-400 transition-opacity cursor-pointer"
+                        title="Remover etapa"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ))}
+
+                  {/* Add Quick Task Inline */}
+                  <div className="flex items-center gap-2 pt-1">
+                    <input
+                      type="text"
+                      value={newQuickTaskTitle}
+                      onChange={(e) => setNewQuickTaskTitle(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          handleAddNewTaskToProject(selectedProject.id);
+                        }
+                      }}
+                      placeholder="+ Adicionar nova etapa (pressione Enter)..."
+                      className="flex-1 bg-[#161616] border border-white/10 px-3 py-2 text-xs font-mono text-white placeholder-white/40 focus:outline-none focus:border-[#C6FF00]"
+                    />
+                    <button
+                      onClick={() => handleAddNewTaskToProject(selectedProject.id)}
+                      disabled={isAddingTask || !newQuickTaskTitle.trim()}
+                      className="px-3 py-2 bg-[#C6FF00] hover:bg-[#b0e600] disabled:opacity-40 text-[#0A0A0A] font-bold text-xs font-mono flex items-center gap-1 transition-colors cursor-pointer"
+                    >
+                      <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
+                      <span>Adicionar</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Drawer Footer Actions */}
+            <div className="p-4 border-t border-white/10 bg-[#0E0E0E] flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => handleDeleteProject(selectedProject.id)}
+                  className="px-3 py-2 bg-rose-950/30 hover:bg-rose-950/60 text-rose-400 border border-rose-800/40 text-xs font-mono flex items-center gap-1.5 transition-colors cursor-pointer"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Excluir</span>
+                </button>
+              </div>
+
+              <div className="flex items-center gap-2">
+                {selectedProject.status !== 'CONCLUÍDO' && (
+                  <button
+                    onClick={() => handleMarkProjectCompleted(selectedProject.id)}
+                    className="px-4 py-2 bg-[#C6FF00] hover:bg-[#b0e600] text-[#0A0A0A] font-mono font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer"
+                  >
+                    <CheckCircle2 className="w-3.5 h-3.5 stroke-[2.5]" />
+                    <span>Concluir Projeto</span>
+                  </button>
+                )}
+                <button
+                  onClick={() => setSelectedProject(null)}
+                  className="px-4 py-2 bg-white/5 hover:bg-white/10 text-white font-mono text-xs border border-white/10 transition-colors cursor-pointer"
+                >
+                  Fechar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ------------------------------------------------------------- */}
+      {/* MODAL: NOVO PROJETO */}
+      {/* ------------------------------------------------------------- */}
+      {isNewProjectModalOpen && (
+        <NewProjectModal
+          clients={clients}
+          services={services}
+          profiles={profiles}
+          onClose={() => setIsNewProjectModalOpen(false)}
+          onCreated={(newProj) => {
+            setProjects((prev) => [newProj, ...prev]);
+            setIsNewProjectModalOpen(false);
+          }}
+        />
+      )}
+
+      {/* ------------------------------------------------------------- */}
+      {/* MODAL: SQL SCHEMA VIEWER */}
+      {/* ------------------------------------------------------------- */}
+      {isSqlModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+          <div className="w-full max-w-3xl bg-[#111111] border border-white/10 p-5 space-y-4 shadow-2xl">
+            <div className="flex items-center justify-between pb-3 border-b border-white/10">
+              <div className="flex items-center gap-2">
+                <Code2 className="w-5 h-5 text-[#C6FF00]" />
+                <h3 className="font-mono text-base font-bold text-white">
+                  Estrutura SQL do Módulo de Projetos (Supabase)
+                </h3>
+              </div>
+              <button
+                onClick={() => setIsSqlModalOpen(false)}
+                className="text-white/60 hover:text-white p-1"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <p className="text-xs text-white/60 font-sans">
+              Copie o script abaixo e execute no <strong>SQL Editor</strong> do painel do Supabase
+              para criar as tabelas <code className="text-[#C6FF00]">projects</code> e{' '}
+              <code className="text-[#C6FF00]">project_tasks</code> com políticas de segurança RLS
+              automáticas:
+            </p>
+
+            <pre className="p-3 bg-[#0A0A0A] border border-white/10 text-[11px] font-mono text-zinc-300 max-h-72 overflow-y-auto overflow-x-auto leading-relaxed">
+{`-- Execute no Supabase SQL Editor:
+CREATE TABLE IF NOT EXISTS public.projects (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name TEXT NOT NULL,
+    client_id UUID REFERENCES public.clients(id) ON DELETE SET NULL,
+    service_id UUID REFERENCES public.services(id) ON DELETE SET NULL,
+    description TEXT,
+    responsible_user_id UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
+    status TEXT NOT NULL DEFAULT 'A FAZER',
+    priority TEXT NOT NULL DEFAULT 'Normal',
+    start_date DATE DEFAULT CURRENT_DATE,
+    deadline DATE,
+    value NUMERIC(12, 2) DEFAULT 0.00,
+    notes TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS public.project_tasks (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    project_id UUID NOT NULL REFERENCES public.projects(id) ON DELETE CASCADE,
+    title TEXT NOT NULL,
+    completed BOOLEAN NOT NULL DEFAULT false,
+    responsible_user_id UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+ALTER TABLE public.projects ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.project_tasks ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Allow authenticated read on projects" ON public.projects FOR SELECT TO authenticated USING (true);
+CREATE POLICY "Allow authenticated insert on projects" ON public.projects FOR INSERT TO authenticated WITH CHECK (true);
+CREATE POLICY "Allow authenticated update on projects" ON public.projects FOR UPDATE TO authenticated USING (true);
+CREATE POLICY "Allow authenticated delete on projects" ON public.projects FOR DELETE TO authenticated USING (true);
+
+CREATE POLICY "Allow authenticated read on project_tasks" ON public.project_tasks FOR SELECT TO authenticated USING (true);
+CREATE POLICY "Allow authenticated insert on project_tasks" ON public.project_tasks FOR INSERT TO authenticated WITH CHECK (true);
+CREATE POLICY "Allow authenticated update on project_tasks" ON public.project_tasks FOR UPDATE TO authenticated USING (true);
+CREATE POLICY "Allow authenticated delete on project_tasks" ON public.project_tasks FOR DELETE TO authenticated USING (true);`}
+            </pre>
+
+            <div className="flex items-center justify-between pt-2">
+              <span className="text-[11px] text-white/40 font-mono">
+                Arquivo completo salvo em: /supabase_projects_schema.sql
+              </span>
+              <button
+                onClick={handleCopySql}
+                className="px-4 py-2 bg-[#C6FF00] hover:bg-[#b0e600] text-[#0A0A0A] font-mono font-bold text-xs flex items-center gap-2 transition-colors cursor-pointer"
+              >
+                {sqlCopied ? <Check className="w-4 h-4 stroke-[2.5]" /> : <Copy className="w-4 h-4" />}
+                <span>{sqlCopied ? 'COPIADO COM SUCESSO!' : 'COPIAR SCRIPT SQL'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// -------------------------------------------------------------
+// SUB-COMPONENTE: CARD DO PROJETO (KANBAN)
+// -------------------------------------------------------------
+interface ProjectCardItemProps {
+  project: ProjectItem;
+  onDragStart: (e: React.DragEvent) => void;
+  onSelect: () => void;
+  onToggleTask: (taskId: string, currentCompleted: boolean) => void;
+}
+
+function ProjectCardItem({
+  project,
+  onDragStart,
+  onSelect,
+  onToggleTask,
+}: ProjectCardItemProps) {
+  const priorityConf = PROJECT_PRIORITY_CONFIG[project.priority];
+
+  return (
+    <div
+      draggable
+      onDragStart={onDragStart}
+      onClick={onSelect}
+      className={`bg-[#161616] hover:bg-[#1C1C1C] border p-3 flex flex-col justify-between transition-all duration-150 cursor-grab active:cursor-grabbing group shadow-sm ${
+        project.is_delayed
+          ? 'border-rose-600/60 hover:border-rose-500'
+          : 'border-white/5 hover:border-white/20'
+      }`}
+    >
+      <div>
+        {/* Top Badges */}
+        <div className="flex items-center justify-between gap-1 mb-2">
+          {/* Priority */}
+          <span
+            className={`inline-flex items-center gap-1 px-1.5 py-0.5 text-[9px] font-mono font-bold ${priorityConf.badgeClass}`}
+          >
+            <span className={`w-1 h-1 rounded-full ${priorityConf.dotClass}`} />
+            {project.priority}
+          </span>
+
+          {/* Delayed Flag */}
+          {project.is_delayed ? (
+            <span className="px-1.5 py-0.5 bg-rose-950/90 text-rose-300 border border-rose-600/70 text-[9px] font-mono font-bold flex items-center gap-1 animate-pulse">
+              <AlertTriangle className="w-2.5 h-2.5 text-rose-400" />
+              ATRASADO
+            </span>
+          ) : (
+            <span className="text-[10px] font-mono text-white/40 flex items-center gap-1">
+              <Clock className="w-3 h-3 text-white/30" />
+              {project.deadline
+                ? new Date(project.deadline + 'T00:00:00').toLocaleDateString('pt-BR')
+                : 'Sem data'}
+            </span>
+          )}
+        </div>
+
+        {/* Project Title */}
+        <h3 className="font-mono text-xs font-bold text-white group-hover:text-[#C6FF00] transition-colors leading-tight mb-1.5">
+          {project.name}
+        </h3>
+
+        {/* Client & Service */}
+        <div className="space-y-1 mb-3 text-[11px] font-mono">
+          <div className="flex items-center gap-1.5 text-white/70 truncate">
+            <Building className="w-3 h-3 text-white/30 shrink-0" />
+            <span className="truncate">{project.client_name}</span>
+          </div>
+          <div className="flex items-center gap-1.5 text-[#C6FF00]/80 truncate">
+            <Layers className="w-3 h-3 text-[#C6FF00]/40 shrink-0" />
+            <span className="truncate">{project.service_name}</span>
+          </div>
+        </div>
+
+        {/* Tasks Progress Bar */}
+        <div className="space-y-1 mb-3">
+          <div className="flex justify-between text-[10px] font-mono text-white/50">
+            <span>
+              Etapas ({project.tasks_completed}/{project.tasks_total})
+            </span>
+            <span className="text-[#C6FF00] font-bold">{project.progress_percent}%</span>
+          </div>
+          <div className="h-1.5 w-full bg-[#111111] overflow-hidden border border-white/5">
+            <div
+              style={{ width: `${project.progress_percent}%` }}
+              className="h-full bg-[#C6FF00] transition-all duration-300"
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Card Footer */}
+      <div className="pt-2 border-t border-white/5 flex items-center justify-between text-[10px] font-mono text-white/50">
+        <span className="flex items-center gap-1 text-white/60 truncate max-w-[100px]">
+          <User className="w-3 h-3 text-white/30 shrink-0" />
+          <span className="truncate">{project.responsible_name}</span>
+        </span>
+        <span className="font-bold text-white font-mono">
+          {formatProjectCurrency(project.value)}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+// -------------------------------------------------------------
+// MODAL DE CRIAÇÃO DE NOVO PROJETO
+// -------------------------------------------------------------
+interface NewProjectModalProps {
+  clients: ClientEntity[];
+  services: ServiceItem[];
+  profiles: ProfileUser[];
+  onClose: () => void;
+  onCreated: (proj: ProjectItem) => void;
+}
+
+function NewProjectModal({
+  clients,
+  services,
+  profiles,
+  onClose,
+  onCreated,
+}: NewProjectModalProps) {
+  const [name, setName] = useState('');
+  const [clientId, setClientId] = useState<string>(clients[0]?.id || '');
+  const [serviceId, setServiceId] = useState<string>(services[0]?.id || '');
+  const [responsibleId, setResponsibleId] = useState<string>(profiles[0]?.id || '');
+  const [description, setDescription] = useState('');
+  const [priority, setPriority] = useState<ProjectPriority>('Normal');
+  const [status, setStatus] = useState<ProjectStatus>('A FAZER');
+  const [deadline, setDeadline] = useState(
+    new Date(Date.now() + 14 * 86400000).toISOString().split('T')[0]
+  );
+  const [value, setValue] = useState<string>('3500');
+  const [notes, setNotes] = useState('');
+
+  // Initial tasks
+  const [taskInputs, setTaskInputs] = useState<string[]>([
+    'Kickoff & alinhamento de escopo',
+    'Desenvolvimento & produção técnica',
+    'Homologação com o parceiro',
+  ]);
+  const [newTaskText, setNewTaskText] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Auto-fill price based on selected service
+  const handleServiceChange = (sId: string) => {
+    setServiceId(sId);
+    const matched = services.find((s) => s.id === sId);
+    if (matched && matched.base_price) {
+      setValue(matched.base_price.toString());
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!name.trim()) return;
+
+    setIsSubmitting(true);
+    try {
+      const created = await createProjectRecord({
+        name: name.trim(),
+        client_id: clientId || null,
+        service_id: serviceId || null,
+        responsible_user_id: responsibleId || null,
+        description: description.trim() || null,
+        priority,
+        status,
+        deadline: deadline || null,
+        value: Number(value) || 0,
+        notes: notes.trim() || null,
+        initialTasks: taskInputs.filter((t) => t.trim().length > 0),
+      });
+
+      if (created) {
+        onCreated(created);
+      }
+    } catch (err) {
+      console.error('Erro ao criar projeto:', err);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+      <div className="w-full max-w-xl bg-[#111111] border border-white/10 p-5 space-y-4 shadow-2xl max-h-[92vh] overflow-y-auto">
+        <div className="flex items-center justify-between pb-3 border-b border-white/10">
+          <div>
+            <span className="text-[10px] font-mono text-[#C6FF00] uppercase">// NOVO PROJETO</span>
+            <h3 className="font-mono text-base font-bold text-white">Cadastrar Demanda & Sprint</h3>
+          </div>
+          <button onClick={onClose} className="text-white/60 hover:text-white p-1">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-4 text-xs font-mono">
+          {/* Nome do Projeto */}
+          <div>
+            <label className="block text-[10px] text-white/50 uppercase mb-1">
+              Nome do Projeto *
+            </label>
+            <input
+              type="text"
+              required
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Ex: Landing Page Alta Conversão + Tráfego Pago"
+              className="w-full bg-[#161616] border border-white/10 px-3 py-2 text-white focus:outline-none focus:border-[#C6FF00]"
+            />
+          </div>
+
+          {/* Cliente e Serviço Grid */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-[10px] text-white/50 uppercase mb-1">
+                Cliente (da tabela clients)
+              </label>
+              <select
+                value={clientId}
+                onChange={(e) => setClientId(e.target.value)}
+                className="w-full bg-[#161616] border border-white/10 px-3 py-2 text-white focus:outline-none focus:border-[#C6FF00] cursor-pointer"
+              >
+                <option value="">-- Selecione o Cliente --</option>
+                {clients.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.company_name} ({c.contact_name})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-[10px] text-white/50 uppercase mb-1">
+                Serviço de Origem
+              </label>
+              <select
+                value={serviceId}
+                onChange={(e) => handleServiceChange(e.target.value)}
+                className="w-full bg-[#161616] border border-white/10 px-3 py-2 text-white focus:outline-none focus:border-[#C6FF00] cursor-pointer"
+              >
+                <option value="">-- Selecione o Serviço --</option>
+                {services.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {/* Responsável, Prioridade e Status */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div>
+              <label className="block text-[10px] text-white/50 uppercase mb-1">
+                Responsável Técnico
+              </label>
+              <select
+                value={responsibleId}
+                onChange={(e) => setResponsibleId(e.target.value)}
+                className="w-full bg-[#161616] border border-white/10 px-3 py-2 text-white focus:outline-none focus:border-[#C6FF00] cursor-pointer"
+              >
+                <option value="">-- Selecione --</option>
+                {profiles.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.full_name || p.email}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-[10px] text-white/50 uppercase mb-1">Prioridade</label>
+              <select
+                value={priority}
+                onChange={(e) => setPriority(e.target.value as ProjectPriority)}
+                className="w-full bg-[#161616] border border-white/10 px-3 py-2 text-white focus:outline-none focus:border-[#C6FF00] cursor-pointer"
+              >
+                <option value="Baixa">Baixa</option>
+                <option value="Normal">Normal</option>
+                <option value="Alta">Alta</option>
+                <option value="Urgente">Urgente</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-[10px] text-white/50 uppercase mb-1">Status Inicial</label>
+              <select
+                value={status}
+                onChange={(e) => setStatus(e.target.value as ProjectStatus)}
+                className="w-full bg-[#161616] border border-white/10 px-3 py-2 text-white focus:outline-none focus:border-[#C6FF00] cursor-pointer"
+              >
+                {KANBAN_STAGES.map((st) => (
+                  <option key={st} value={st}>
+                    {st}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {/* Prazo e Valor */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-[10px] text-white/50 uppercase mb-1">
+                Data Prazo (Deadline) *
+              </label>
+              <input
+                type="date"
+                required
+                value={deadline}
+                onChange={(e) => setDeadline(e.target.value)}
+                className="w-full bg-[#161616] border border-white/10 px-3 py-2 text-white focus:outline-none focus:border-[#C6FF00]"
+              />
+            </div>
+
+            <div>
+              <label className="block text-[10px] text-white/50 uppercase mb-1">
+                Valor do Projeto (R$)
+              </label>
+              <input
+                type="number"
+                step="50"
+                value={value}
+                onChange={(e) => setValue(e.target.value)}
+                placeholder="0.00"
+                className="w-full bg-[#161616] border border-white/10 px-3 py-2 text-white focus:outline-none focus:border-[#C6FF00]"
+              />
+            </div>
+          </div>
+
+          {/* Descrição */}
+          <div>
+            <label className="block text-[10px] text-white/50 uppercase mb-1">
+              Escopo / Descrição
+            </label>
+            <textarea
+              rows={2}
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="Descreva as entregas acordadas e especificações..."
+              className="w-full bg-[#161616] border border-white/10 px-3 py-2 text-white focus:outline-none focus:border-[#C6FF00]"
+            />
+          </div>
+
+          {/* Tarefas Iniciais */}
+          <div className="space-y-2">
+            <label className="block text-[10px] text-white/50 uppercase">
+              Checklist Inicial de Entregáveis:
+            </label>
+            <div className="space-y-1.5">
+              {taskInputs.map((t, idx) => (
+                <div key={idx} className="flex items-center gap-2">
+                  <span className="text-[10px] text-[#C6FF00] font-bold">{idx + 1}.</span>
+                  <input
+                    type="text"
+                    value={t}
+                    onChange={(e) => {
+                      const updated = [...taskInputs];
+                      updated[idx] = e.target.value;
+                      setTaskInputs(updated);
+                    }}
+                    className="flex-1 bg-[#161616] border border-white/5 px-2.5 py-1.5 text-xs text-white"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setTaskInputs(taskInputs.filter((_, i) => i !== idx))}
+                    className="text-white/30 hover:text-rose-400 p-1"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            <div className="flex items-center gap-2 pt-1">
+              <input
+                type="text"
+                value={newTaskText}
+                onChange={(e) => setNewTaskText(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && newTaskText.trim()) {
+                    e.preventDefault();
+                    setTaskInputs([...taskInputs, newTaskText.trim()]);
+                    setNewTaskText('');
+                  }
+                }}
+                placeholder="+ Adicionar outra etapa..."
+                className="flex-1 bg-[#161616] border border-white/10 px-2.5 py-1.5 text-xs text-white"
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  if (newTaskText.trim()) {
+                    setTaskInputs([...taskInputs, newTaskText.trim()]);
+                    setNewTaskText('');
+                  }
+                }}
+                className="px-2.5 py-1.5 bg-white/10 hover:bg-white/20 text-white text-xs font-mono"
+              >
+                + Incluir
+              </button>
+            </div>
+          </div>
+
+          {/* Modal Footer */}
+          <div className="flex items-center justify-end gap-2 pt-3 border-t border-white/10">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 bg-white/5 hover:bg-white/10 text-white font-mono text-xs transition-colors cursor-pointer"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              disabled={isSubmitting || !name.trim()}
+              className="px-5 py-2 bg-[#C6FF00] hover:bg-[#b0e600] disabled:opacity-40 text-[#0A0A0A] font-mono font-bold text-xs tracking-wider flex items-center gap-2 transition-colors cursor-pointer shadow-md"
+            >
+              {isSubmitting ? (
+                <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
+              )}
+              <span>CRIAR PROJETO</span>
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}

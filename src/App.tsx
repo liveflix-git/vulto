@@ -15,6 +15,7 @@ import { ContactPage } from './pages/ContactPage';
 import { ServicesPage } from './pages/ServicesPage';
 import { ServiceDetailPage } from './pages/ServiceDetailPage';
 import { SERVICES_DATA } from './data/siteData';
+import { DashboardApp } from './dashboard/DashboardApp';
 
 export default function App() {
   const [currentLocale, setCurrentLocale] = useState<'pt-BR' | 'pt-PT'>(() => {
@@ -97,8 +98,36 @@ export default function App() {
       document.title = 'Contato | Vulto Lab — Vamos Construir o Próximo Resultado';
     } else if (normalizedPath === '/servicos') {
       document.title = 'Estrutura & Serviços | Vulto Lab';
+    } else if (normalizedPath === '/dashboard/login') {
+      document.title = 'Command Center — Login | Vulto Lab';
+    } else if (normalizedPath === '/dashboard/crm') {
+      document.title = 'CRM & Pipeline Comercial | Vulto Lab — Core OS';
+    } else if (normalizedPath === '/dashboard/clientes') {
+      document.title = 'Carteira de Clientes & MRR | Vulto Lab — Core OS';
+    } else if (normalizedPath === '/dashboard/financeiro') {
+      document.title = 'Gestão Financeira & Caixa | Vulto Lab — Core OS';
+    } else if (normalizedPath === '/dashboard/vulto-tap') {
+      document.title = 'VULTO TAP & Estoque NFC | Vulto Lab — Core OS';
+    } else if (normalizedPath === '/dashboard/metas') {
+      document.title = 'Metas & Plano Comercial | Vulto Lab — Core OS';
+    } else if (normalizedPath === '/dashboard/projetos') {
+      document.title = 'Projetos & Sprints de Entrega | Vulto Lab — Core OS';
+    } else if (normalizedPath.startsWith('/dashboard')) {
+      document.title = 'Dashboard Executivo | Vulto Lab — Core OS';
     }
   }, [normalizedPath]);
+
+  if (normalizedPath.startsWith('/dashboard')) {
+    return (
+      <div className="min-h-screen bg-[#0A0A0A] text-[#F4F4F1] relative selection:bg-[#C6FF00] selection:text-[#0A0A0A]">
+        <DashboardApp
+          currentPath={normalizedPath}
+          onNavigate={handleNavigate}
+          onNavigatePublic={(p) => handleNavigate(p || '/')}
+        />
+      </div>
+    );
+  }
 
   const renderPageContent = () => {
     if (normalizedPath === '/') {
