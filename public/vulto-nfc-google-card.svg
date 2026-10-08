@@ -1,0 +1,138 @@
+<svg width="600" height="600" viewBox="0 0 600 600" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <!-- Card Gloss & Shadows -->
+    <filter id="cardShadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="16" stdDeviation="24" flood-color="#000000" flood-opacity="0.25"/>
+    </filter>
+    <linearGradient id="glassBorder" x1="0" y1="0" x2="600" y2="600" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.9"/>
+      <stop offset="30%" stop-color="#E0E5EC" stop-opacity="0.5"/>
+      <stop offset="70%" stop-color="#FFFFFF" stop-opacity="0.8"/>
+      <stop offset="100%" stop-color="#B0B9C6" stop-opacity="0.6"/>
+    </linearGradient>
+    <linearGradient id="bgGrad" x1="0" y1="0" x2="0" y2="600" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#FAFAFD"/>
+      <stop offset="100%" stop-color="#F2F4F8"/>
+    </linearGradient>
+    <linearGradient id="nfcCircleBg" x1="150" y1="300" x2="450" y2="500" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#EBF3FE" stop-opacity="0.8"/>
+      <stop offset="100%" stop-color="#DCE8FA" stop-opacity="0.5"/>
+    </linearGradient>
+  </defs>
+
+  <!-- External Acrylic / Glass Frame -->
+  <rect x="20" y="20" width="560" height="560" rx="36" fill="url(#bgGrad)" stroke="url(#glassBorder)" stroke-width="12" filter="url(#cardShadow)" />
+  
+  <!-- Subtle Outer Acrylic Edge Reflection -->
+  <rect x="28" y="28" width="544" height="544" rx="28" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-opacity="0.8" />
+
+  <!-- Technical Corner Accents -->
+  <!-- Top Left Tech Dots & Bracket -->
+  <path d="M60 90 H130 L150 70 M60 100 H100" stroke="#1A73E8" stroke-width="2" stroke-linecap="round" />
+  <circle cx="70" cy="120" r="2" fill="#9AA0A6" />
+  <circle cx="82" cy="120" r="2" fill="#9AA0A6" />
+  <circle cx="94" cy="120" r="2" fill="#9AA0A6" />
+  <circle cx="70" cy="132" r="2" fill="#9AA0A6" />
+  <circle cx="82" cy="132" r="2" fill="#9AA0A6" />
+  <circle cx="94" cy="132" r="2" fill="#9AA0A6" />
+
+  <!-- Top Right Tech Dots & Accent -->
+  <path d="M540 90 H470 L450 70" stroke="#FBBC05" stroke-width="2.5" stroke-linecap="round" />
+  <rect x="510" y="100" width="8" height="8" fill="#9AA0A6" rx="1" />
+  <rect x="522" y="100" width="8" height="8" fill="#9AA0A6" rx="1" />
+  <rect x="534" y="100" width="8" height="8" fill="#9AA0A6" rx="1" />
+
+  <!-- Google "G" Logo -->
+  <g transform="translate(238, 55) scale(1.5)">
+    <!-- Red segment -->
+    <path d="M 41.1 21.6 C 41.1 20.1 40.9 18.7 40.7 17.3 L 21 17.3 L 21 25.5 L 32.3 25.5 C 31.8 28.1 30.3 30.3 28 31.8 L 28 37 C 33.1 32.3 36.1 25.3 41.1 21.6 Z" fill="#4285F4"/>
+    <!-- Green segment -->
+    <path d="M 21 42 C 26.7 42 31.5 40.1 35.1 36.8 L 29.3 32.3 C 27.7 33.4 25.6 34.1 21 34.1 C 15.6 34.1 11 30.5 9.4 25.6 L 3.5 25.6 L 3.5 30.2 C 7.1 37.3 14.5 42 21 42 Z" fill="#34A853"/>
+    <!-- Yellow segment -->
+    <path d="M 9.4 25.6 C 8.9 24.2 8.7 22.6 8.7 21 C 8.7 19.4 8.9 17.8 9.4 16.4 L 9.4 11.8 L 3.5 11.8 C 2 14.8 1.1 17.8 1.1 21 C 1.1 24.2 2 27.2 3.5 30.2 L 9.4 25.6 Z" fill="#FBBC05"/>
+    <!-- Blue/Red top segment -->
+    <path d="M 21 7.9 C 24.1 7.9 26.9 9 29.1 11.1 L 35.2 5 C 31.5 1.5 26.7 0 21 0 C 14.5 0 7.1 4.7 3.5 11.8 L 9.4 16.4 C 11 11.5 15.6 7.9 21 7.9 Z" fill="#EA4335"/>
+  </g>
+
+  <!-- 5 Gold Stars -->
+  <g transform="translate(182, 142)">
+    <!-- Star 1 -->
+    <polygon points="18,0 23,12 36,13 26,22 29,35 18,28 7,35 10,22 0,13 13,12" fill="#FFB800" stroke="#E6A100" stroke-width="1.5"/>
+    <!-- Star 2 -->
+    <polygon points="66,0 71,12 84,13 74,22 77,35 66,28 55,35 58,22 48,13 61,12" fill="#FFB800" stroke="#E6A100" stroke-width="1.5"/>
+    <!-- Star 3 -->
+    <polygon points="114,0 119,12 132,13 122,22 125,35 114,28 103,35 106,22 96,13 109,12" fill="#FFB800" stroke="#E6A100" stroke-width="1.5"/>
+    <!-- Star 4 -->
+    <polygon points="162,0 167,12 180,13 170,22 173,35 162,28 151,35 154,22 144,13 157,12" fill="#FFB800" stroke="#E6A100" stroke-width="1.5"/>
+    <!-- Star 5 -->
+    <polygon points="210,0 215,12 228,13 218,22 221,35 210,28 199,35 202,22 192,13 205,12" fill="#FFB800" stroke="#E6A100" stroke-width="1.5"/>
+  </g>
+
+  <!-- Text Header 1: ADORARÍAMOS A SUA -->
+  <text x="300" y="222" font-family="system-ui, -apple-system, sans-serif" font-weight="900" font-size="32" fill="#0A0A0A" text-anchor="middle" letter-spacing="0.5">
+    ADORARÍAMOS A SUA
+  </text>
+
+  <!-- Text Header 2: AVALIAÇÃO NO GOOGLE -->
+  <text x="300" y="268" font-family="system-ui, -apple-system, sans-serif" font-weight="900" font-size="38" fill="#1A73E8" text-anchor="middle" letter-spacing="-0.5">
+    AVALIAÇÃO NO GOOGLE
+  </text>
+
+  <!-- Subtitle Divider Line Left & Right -->
+  <line x1="60" y1="298" x2="160" y2="298" stroke="#0A0A0A" stroke-width="2" />
+  <line x1="440" y1="298" x2="540" y2="298" stroke="#0A0A0A" stroke-width="2" />
+  
+  <text x="300" y="303" font-family="system-ui, -apple-system, sans-serif" font-weight="800" font-size="14" fill="#0A0A0A" text-anchor="middle" letter-spacing="2">
+    SUA OPINIÃO NOS AJUDA A CRESCER
+  </text>
+
+  <!-- Center Circle Graphic for NFC Tap -->
+  <circle cx="300" cy="405" r="70" fill="url(#nfcCircleBg)" stroke="#1A73E8" stroke-width="1.5" stroke-dasharray="4 4"/>
+  <circle cx="300" cy="405" r="85" stroke="#1A73E8" stroke-width="1" stroke-opacity="0.3"/>
+  <circle cx="300" cy="405" r="100" stroke="#1A73E8" stroke-width="1" stroke-opacity="0.15"/>
+
+  <!-- NFC Wave Curves (Left & Right) -->
+  <path d="M 225 385 A 25 25 0 0 0 225 425" fill="none" stroke="#1A73E8" stroke-width="3" stroke-linecap="round" />
+  <path d="M 215 375 A 35 35 0 0 0 215 435" fill="none" stroke="#1A73E8" stroke-width="3" stroke-linecap="round" />
+
+  <!-- Hand Holding Phone Icon -->
+  <g transform="translate(280, 360) scale(1.1)">
+    <!-- Smartphone Frame -->
+    <rect x="10" y="8" width="30" height="52" rx="6" fill="#FFFFFF" stroke="#0A0A0A" stroke-width="3" />
+    <rect x="14" y="14" width="22" height="40" rx="3" fill="#0A0A0A" />
+    <!-- NFC signal waves on phone -->
+    <path d="M 21 28 A 6 6 0 0 1 29 28" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" />
+    <path d="M 18 24 A 10 10 0 0 1 32 24" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" />
+    <!-- Hand outline -->
+    <path d="M 38 38 C 45 38 52 45 48 55 C 45 62 38 64 30 64" fill="none" stroke="#0A0A0A" stroke-width="3.5" stroke-linecap="round" />
+  </g>
+
+  <!-- Call to Action Text inside card -->
+  <text x="300" y="498" font-family="system-ui, -apple-system, sans-serif" font-weight="900" font-size="28" fill="#0A0A0A" text-anchor="middle">
+    Aproxime
+  </text>
+  <text x="300" y="528" font-family="system-ui, -apple-system, sans-serif" font-weight="900" font-size="28" fill="#0A0A0A" text-anchor="middle">
+    seu celular
+  </text>
+
+  <!-- Bottom Colorful Waves -->
+  <!-- Blue Left Wave -->
+  <path d="M 24 530 C 80 500 120 440 220 500 C 180 560 100 570 24 570 Z" fill="#1A73E8" />
+  <!-- Red Wave -->
+  <path d="M 24 570 C 110 570 180 530 260 560 C 200 580 100 580 24 580 Z" fill="#EA4335" />
+  <!-- Yellow Bottom Curve -->
+  <path d="M 200 575 C 320 530 450 560 576 575 L 576 580 L 200 580 Z" fill="#FBBC05" />
+  <!-- Green Right Wave -->
+  <path d="M 380 550 C 480 470 540 430 576 430 L 576 575 C 500 560 420 570 380 550 Z" fill="#34A853" />
+
+  <!-- Bottom Corner Dots -->
+  <circle cx="70" cy="520" r="2" fill="#FFFFFF" opacity="0.8" />
+  <circle cx="80" cy="520" r="2" fill="#FFFFFF" opacity="0.8" />
+  <circle cx="70" cy="530" r="2" fill="#FFFFFF" opacity="0.8" />
+  <circle cx="80" cy="530" r="2" fill="#FFFFFF" opacity="0.8" />
+
+  <circle cx="520" cy="520" r="2" fill="#FFFFFF" opacity="0.8" />
+  <circle cx="530" cy="520" r="2" fill="#FFFFFF" opacity="0.8" />
+  <circle cx="520" cy="530" r="2" fill="#FFFFFF" opacity="0.8" />
+  <circle cx="530" cy="530" r="2" fill="#FFFFFF" opacity="0.8" />
+</svg>
