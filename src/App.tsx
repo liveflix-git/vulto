@@ -16,17 +16,10 @@ import { ServicesPage } from './pages/ServicesPage';
 import { ServiceDetailPage } from './pages/ServiceDetailPage';
 import { SERVICES_DATA } from './data/siteData';
 import { DashboardApp } from './dashboard/DashboardApp';
+import { LanguageProvider, useLanguage } from './context/LanguageContext';
 
-export default function App() {
-  const [currentLocale, setCurrentLocale] = useState<'pt-BR' | 'pt-PT'>(() => {
-    const saved = localStorage.getItem('vulto_locale');
-    return saved === 'pt-PT' ? 'pt-PT' : 'pt-BR';
-  });
-
-  const handleLocaleChange = useCallback((newLocale: 'pt-BR' | 'pt-PT') => {
-    setCurrentLocale(newLocale);
-    localStorage.setItem('vulto_locale', newLocale);
-  }, []);
+function AppContent() {
+  const { locale, setLocale } = useLanguage();
 
   const [route, setRoute] = useState<string>(() => {
     return window.location.pathname + window.location.search;
@@ -78,6 +71,7 @@ export default function App() {
   const preselectedService = searchParams.get('servico') || '';
 
   useEffect(() => {
+    const isPT = locale === 'pt-PT';
     if (normalizedPath === '/') {
       document.title = 'Vulto Lab | Tráfego Pago, Sites e Estratégia Digital';
     } else if (normalizedPath === '/paid-media') {
@@ -91,31 +85,33 @@ export default function App() {
     } else if (normalizedPath === '/inteligencia-artificial') {
       document.title = 'Inteligência Artificial | Vulto Lab — Atendimento 24/7';
     } else if (normalizedPath === '/cases') {
-      document.title = 'Cases & Experiência | Vulto Lab';
+      document.title = isPT
+        ? 'Casos & Experiência | Vulto Lab'
+        : 'Cases & Experiência | Vulto Lab';
     } else if (normalizedPath === '/sobre') {
-      document.title = 'Sobre a Vulto Lab | Estratégia Antes de Execução';
+      document.title = isPT
+        ? 'Sobre a Vulto Lab | Estratégia Antes da Execução'
+        : 'Sobre a Vulto Lab | Estratégia Antes de Execução';
     } else if (normalizedPath === '/contato') {
-      document.title = 'Contato | Vulto Lab — Vamos Construir o Próximo Resultado';
+      document.title = isPT
+        ? 'Contacto | Vulto Lab — Vamos Construir o Próximo Resultado'
+        : 'Contato | Vulto Lab — Vamos Construir o Próximo Resultado';
     } else if (normalizedPath === '/servicos') {
       document.title = 'Estrutura & Serviços | Vulto Lab';
     } else if (normalizedPath === '/dashboard/login') {
       document.title = 'Command Center — Login | Vulto Lab';
-    } else if (normalizedPath === '/dashboard/crm') {
-      document.title = 'CRM & Pipeline Comercial | Vulto Lab — Core OS';
     } else if (normalizedPath === '/dashboard/clientes') {
       document.title = 'Carteira de Clientes & MRR | Vulto Lab — Core OS';
-    } else if (normalizedPath === '/dashboard/financeiro') {
-      document.title = 'Gestão Financeira & Caixa | Vulto Lab — Core OS';
+    } else if (normalizedPath === '/dashboard/financeiro' || normalizedPath === '/dashboard/crm') {
+      document.title = 'Gestão Financeira & Comercial | Vulto Lab — Core OS';
     } else if (normalizedPath === '/dashboard/vulto-tap') {
       document.title = 'VULTO TAP & Estoque NFC | Vulto Lab — Core OS';
-    } else if (normalizedPath === '/dashboard/metas') {
-      document.title = 'Metas & Plano Comercial | Vulto Lab — Core OS';
     } else if (normalizedPath === '/dashboard/projetos') {
-      document.title = 'Projetos & Sprints de Entrega | Vulto Lab — Core OS';
+      document.title = 'Projetos & Demandas | Vulto Lab — Core OS';
     } else if (normalizedPath.startsWith('/dashboard')) {
       document.title = 'Dashboard Executivo | Vulto Lab — Core OS';
     }
-  }, [normalizedPath]);
+  }, [normalizedPath, locale]);
 
   if (normalizedPath.startsWith('/dashboard')) {
     return (
@@ -131,7 +127,7 @@ export default function App() {
 
   const renderPageContent = () => {
     if (normalizedPath === '/') {
-      return <HomePage onNavigate={handleNavigate} currentLocale={currentLocale} />;
+      return <HomePage onNavigate={handleNavigate} currentLocale={locale} />;
     }
 
     if (normalizedPath === '/paid-media') {
@@ -179,7 +175,7 @@ export default function App() {
       return <ServicesPage onNavigate={handleNavigate} />;
     }
 
-    return <HomePage onNavigate={handleNavigate} currentLocale={currentLocale} />;
+    return <HomePage onNavigate={handleNavigate} currentLocale={locale} />;
   };
 
   return (
@@ -194,8 +190,8 @@ export default function App() {
       <Header
         currentPath={normalizedPath}
         onNavigate={handleNavigate}
-        currentLocale={currentLocale}
-        onLocaleChange={handleLocaleChange}
+        currentLocale={locale}
+        onLocaleChange={setLocale}
       />
 
       <main id="main-content" className="relative z-10">
@@ -206,5 +202,13 @@ export default function App() {
 
       <VultoChat onNavigate={handleNavigate} />
     </div>
+  );
+}
+
+export default function App() {
+  return (
+    <LanguageProvider>
+      <AppContent />
+    </LanguageProvider>
   );
 }

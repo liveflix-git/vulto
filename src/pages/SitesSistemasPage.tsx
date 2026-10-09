@@ -2,12 +2,16 @@ import React from 'react';
 import { motion } from 'motion/react';
 import { ArrowUpRight } from 'lucide-react';
 import { ContactSection } from '../components/ContactSection';
+import { useLanguage } from '../context/LanguageContext';
 
 interface PageProps {
   onNavigate: (path: string) => void;
 }
 
 export const SitesSistemasPage: React.FC<PageProps> = ({ onNavigate }) => {
+  const { dict } = useLanguage();
+  const page = dict.pages.sitesSistemas;
+
   return (
     <div className="bg-[#0A0A0A] text-[#F4F4F1]">
       {/* Hero da Página */}
@@ -16,7 +20,7 @@ export const SitesSistemasPage: React.FC<PageProps> = ({ onNavigate }) => {
           <div className="flex items-center gap-3 mb-6">
             <span className="w-6 h-[1.5px] bg-[#C6FF00]" />
             <span className="font-mono-tabular text-xs uppercase tracking-[0.2em] text-[#C6FF00] font-semibold">
-              DIGITAL SYSTEMS
+              {page.kicker}
             </span>
           </div>
 
@@ -28,9 +32,9 @@ export const SitesSistemasPage: React.FC<PageProps> = ({ onNavigate }) => {
                 transition={{ duration: 0.45 }}
                 className="font-display font-bold uppercase text-4xl sm:text-6xl lg:text-7xl leading-[0.95] tracking-[-0.04em] text-[#F4F4F1]"
               >
-                INFRAESTRUTURA DIGITAL
+                {page.heroTitle1}
                 <br />
-                PARA EMPRESAS QUE QUEREM CRESCER<span className="text-[#C6FF00]">.</span>
+                {page.heroTitle2}<span className="text-[#C6FF00]">.</span>
               </motion.h1>
 
               <motion.p
@@ -39,7 +43,7 @@ export const SitesSistemasPage: React.FC<PageProps> = ({ onNavigate }) => {
                 transition={{ duration: 0.45, delay: 0.1 }}
                 className="mt-6 text-lg sm:text-xl text-[#F4F4F1]/85 max-w-2xl leading-relaxed"
               >
-                Sites, landing pages, sistemas, integrações e automações construídos para operar, converter e escalar.
+                {page.heroSubtitle}
               </motion.p>
             </div>
 
@@ -53,7 +57,7 @@ export const SitesSistemasPage: React.FC<PageProps> = ({ onNavigate }) => {
                 data-cursor="cta"
                 className="inline-flex items-center justify-center gap-3 px-8 py-4 bg-[#C6FF00] text-[#0A0A0A] text-xs font-bold uppercase tracking-[0.08em] hover:bg-[#d4ff33] transition-colors whitespace-nowrap"
               >
-                <span>CONSTRUIR MINHA ESTRUTURA DIGITAL</span>
+                <span>{page.heroCta}</span>
                 <ArrowUpRight className="w-4 h-4 stroke-[2.5]" />
               </a>
             </div>
@@ -67,54 +71,29 @@ export const SitesSistemasPage: React.FC<PageProps> = ({ onNavigate }) => {
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-start">
             <div className="lg:col-span-5">
               <span className="font-mono-tabular text-xs uppercase tracking-[0.2em] text-[#F4F4F1]/45 block mb-4">
-                ENGENHARIA WEB &amp; SISTEMAS
+                {page.visionKicker}
               </span>
               <h2 className="font-display font-bold uppercase text-3xl sm:text-4xl tracking-[-0.03em] text-[#F4F4F1]">
-                DESENVOLVIMENTO PENSADO PARA NEGÓCIO<span className="text-[#C6FF00]">.</span>
+                {page.visionTitle}<span className="text-[#C6FF00]">.</span>
               </h2>
             </div>
 
             <div className="lg:col-span-7 space-y-6 text-base sm:text-lg text-[#F4F4F1]/80 leading-relaxed">
               <p className="text-[#F4F4F1] font-semibold">
-                Criamos soluções digitais utilizando tecnologias atuais, arquitetura organizada e experiências pensadas para negócio.
+                {page.p1}
               </p>
               <p>
-                Nosso time de desenvolvimento trabalha com foco em performance, experiência, velocidade e integração.
+                {page.p2}
               </p>
               <p className="border-l-2 border-[#C6FF00] pl-4 text-[#F4F4F1] font-semibold">
-                Nosso diferencial está na capacidade de entregar estruturas sofisticadas com excelente relação entre investimento, prazo e qualidade.
+                {page.quote}
               </p>
             </div>
           </div>
 
           {/* Serviços */}
           <div className="mt-20 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 border-t border-l border-[#F4F4F1]/12">
-            {[
-              {
-                title: 'SITES',
-                desc: 'Sites institucionais modernos, responsivos e orientados à percepção de valor.',
-              },
-              {
-                title: 'LANDING PAGES',
-                desc: 'Páginas criadas para campanhas e conversão.',
-              },
-              {
-                title: 'SISTEMAS',
-                desc: 'Aplicações web e soluções personalizadas.',
-              },
-              {
-                title: 'AUTOMAÇÕES',
-                desc: 'Processos que eliminam tarefas repetitivas.',
-              },
-              {
-                title: 'INTEGRAÇÕES',
-                desc: 'APIs, CRMs, analytics e ferramentas externas.',
-              },
-              {
-                title: 'ECOSSISTEMAS',
-                desc: 'Múltiplas soluções trabalhando como uma única estrutura.',
-              },
-            ].map((block, idx) => (
+            {page.capabilities.map((block, idx) => (
               <div
                 key={block.title}
                 className="p-8 border-r border-b border-[#F4F4F1]/12 bg-[#0A0A0A] hover:bg-[#1A1A1A]/40 transition-colors"

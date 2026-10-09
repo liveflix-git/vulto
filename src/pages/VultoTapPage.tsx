@@ -3,12 +3,16 @@ import { motion } from 'motion/react';
 import { ArrowUpRight } from 'lucide-react';
 import { ContactSection } from '../components/ContactSection';
 import { NfcShowcaseSection } from '../components/NfcShowcaseSection';
+import { useLanguage } from '../context/LanguageContext';
 
 interface PageProps {
   onNavigate: (path: string) => void;
 }
 
 export const VultoTapPage: React.FC<PageProps> = ({ onNavigate }) => {
+  const { dict } = useLanguage();
+  const page = dict.pages.vultoTap;
+
   return (
     <div className="bg-[#0A0A0A] text-[#F4F4F1]">
       {/* Hero da Página */}
@@ -17,7 +21,7 @@ export const VultoTapPage: React.FC<PageProps> = ({ onNavigate }) => {
           <div className="flex items-center gap-3 mb-6">
             <span className="w-6 h-[1.5px] bg-[#C6FF00]" />
             <span className="font-mono-tabular text-xs uppercase tracking-[0.2em] text-[#C6FF00] font-semibold">
-              VULTO TAP
+              {page.kicker}
             </span>
           </div>
 
@@ -29,9 +33,9 @@ export const VultoTapPage: React.FC<PageProps> = ({ onNavigate }) => {
                 transition={{ duration: 0.45 }}
                 className="font-display font-bold uppercase text-4xl sm:text-6xl lg:text-7xl leading-[0.95] tracking-[-0.04em] text-[#F4F4F1]"
               >
-                UM TOQUE.
+                {page.heroTitle1}
                 <br />
-                UMA AÇÃO<span className="text-[#C6FF00]">.</span>
+                {page.heroTitle2}<span className="text-[#C6FF00]">.</span>
               </motion.h1>
 
               <motion.p
@@ -40,7 +44,7 @@ export const VultoTapPage: React.FC<PageProps> = ({ onNavigate }) => {
                 transition={{ duration: 0.45, delay: 0.1 }}
                 className="mt-6 text-lg sm:text-xl text-[#F4F4F1]/85 max-w-2xl leading-relaxed"
               >
-                Conectamos o ambiente físico à experiência digital através de NFC.
+                {page.heroSubtitle}
               </motion.p>
             </div>
 
@@ -54,7 +58,7 @@ export const VultoTapPage: React.FC<PageProps> = ({ onNavigate }) => {
                 data-cursor="cta"
                 className="inline-flex items-center justify-center gap-3 px-8 py-4 bg-[#C6FF00] text-[#0A0A0A] text-xs font-bold uppercase tracking-[0.08em] hover:bg-[#d4ff33] transition-colors whitespace-nowrap"
               >
-                <span>CRIAR MEU VULTO TAP</span>
+                <span>{page.heroCta}</span>
                 <ArrowUpRight className="w-4 h-4 stroke-[2.5]" />
               </a>
             </div>
@@ -68,59 +72,26 @@ export const VultoTapPage: React.FC<PageProps> = ({ onNavigate }) => {
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-start">
             <div className="lg:col-span-5">
               <span className="font-mono-tabular text-xs uppercase tracking-[0.2em] text-[#F4F4F1]/45 block mb-4">
-                TECNOLOGIA NFC
+                {page.visionKicker}
               </span>
               <h2 className="font-display font-bold uppercase text-3xl sm:text-4xl tracking-[-0.03em] text-[#F4F4F1]">
-                PONTOS DE ACESSO INSTANTÂNEOS<span className="text-[#C6FF00]">.</span>
+                {page.visionTitle}<span className="text-[#C6FF00]">.</span>
               </h2>
             </div>
 
             <div className="lg:col-span-7 space-y-6 text-base sm:text-lg text-[#F4F4F1]/80 leading-relaxed">
               <p className="text-[#F4F4F1] font-semibold">
-                A VULTO TAP transforma cartões e placas físicas personalizadas em pontos de acesso digitais.
+                {page.p1}
               </p>
               <p>
-                Com apenas um toque, o cliente pode realizar ações como avaliar sua empresa, acessar o Wi-Fi, abrir seu WhatsApp, cardápio, catálogo, redes sociais ou qualquer destino configurado.
+                {page.p2}
               </p>
             </div>
           </div>
 
           {/* Funcionalidades */}
           <div className="mt-20 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 border-t border-l border-[#F4F4F1]/12">
-            {[
-              {
-                title: 'AVALIAÇÕES NO GOOGLE',
-                desc: 'Facilite o acesso à página de avaliação.',
-              },
-              {
-                title: 'WI-FI',
-                desc: 'Permita conexão rápida sem digitar senha.',
-              },
-              {
-                title: 'WHATSAPP',
-                desc: 'Abra uma conversa diretamente.',
-              },
-              {
-                title: 'CATÁLOGOS',
-                desc: 'Direcione clientes para produtos e serviços.',
-              },
-              {
-                title: 'CARDÁPIOS',
-                desc: 'Acesso rápido a menus digitais.',
-              },
-              {
-                title: 'CONTATOS',
-                desc: 'Compartilhe informações profissionais.',
-              },
-              {
-                title: 'REDES SOCIAIS',
-                desc: 'Centralize acesso aos canais da marca.',
-              },
-              {
-                title: 'PÁGINAS PERSONALIZADAS',
-                desc: 'Crie destinos específicos para cada ação.',
-              },
-            ].map((block, idx) => (
+            {page.capabilities.map((block, idx) => (
               <div
                 key={block.title}
                 className="p-8 border-r border-b border-[#F4F4F1]/12 bg-[#0A0A0A] hover:bg-[#1A1A1A]/40 transition-colors"
@@ -166,7 +137,7 @@ export const VultoTapPage: React.FC<PageProps> = ({ onNavigate }) => {
         </div>
       </section>
 
-      <NfcShowcaseSection onNavigate={onNavigate} />
+      <NfcShowcaseSection onNavigate={onNavigate} showSpecsButton={false} />
       <ContactSection initialService="VULTO TAP (NFC)" />
     </div>
   );

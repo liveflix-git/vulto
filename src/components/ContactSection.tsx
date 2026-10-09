@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
 import { ArrowUpRight, Check, AlertCircle, RotateCcw } from 'lucide-react';
-import { BRAND_CONFIG, DIRECT_TEAM_CONTACTS, DirectTeamContact } from '../data/siteData';
+import { BRAND_CONFIG, DirectTeamContact } from '../data/siteData';
+import { useLanguage } from '../context/LanguageContext';
 
 export interface ContactFormPayload {
   nome: string;
@@ -12,15 +13,6 @@ export interface ContactFormPayload {
   mensagem: string;
   submittedAt: string;
 }
-
-const SERVICE_OPTIONS = [
-  'Paid Media',
-  'Sites & Sistemas',
-  'Copywriting',
-  'VULTO TAP (NFC)',
-  'Inteligência Artificial',
-  'Outro',
-];
 
 interface ContactSectionProps {
   initialService?: string;
@@ -33,24 +25,18 @@ const WhatsappIcon: React.FC<{ className?: string }> = ({ className = 'w-4 h-4' 
   </svg>
 );
 
-async function submitProjectLead(payload: ContactFormPayload): Promise<{ ok: boolean }> {
-  void payload;
-  return new Promise((resolve) => {
-    window.setTimeout(() => {
-      resolve({ ok: true });
-    }, 350);
-  });
-}
-
 export const ContactSection: React.FC<ContactSectionProps> = ({
   initialService = '',
   isFullPage = false,
 }) => {
+  const { dict, directContacts } = useLanguage();
+  const cs = dict.contactSection;
+
   const [nome, setNome] = useState('');
   const [empresa, setEmpresa] = useState('');
   const [whatsapp, setWhatsapp] = useState('');
   const [email, setEmail] = useState('');
-  const [servico, setServico] = useState(initialService || 'Paid Media');
+  const [servico, setServico] = useState(initialService || cs.serviceOptions[0]);
   const [mensagem, setMensagem] = useState('');
 
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -59,38 +45,38 @@ export const ContactSection: React.FC<ContactSectionProps> = ({
   const [submitted, setSubmitted] = useState(false);
 
   useEffect(() => {
-    if (initialService && SERVICE_OPTIONS.includes(initialService)) {
+    if (initialService && cs.serviceOptions.includes(initialService)) {
       setServico(initialService);
     }
-  }, [initialService]);
+  }, [initialService, cs.serviceOptions]);
 
   const validateForm = (): boolean => {
     const nextErrors: Record<string, string> = {};
 
     if (!nome.trim() || nome.trim().length < 2) {
-      nextErrors.nome = 'Informe seu nome.';
+      nextErrors.nome = cs.errors.name;
     }
 
     if (!empresa.trim()) {
-      nextErrors.empresa = 'Informe o nome da empresa ou marca.';
+      nextErrors.empresa = cs.errors.company;
     }
 
     const digitsOnly = whatsapp.replace(/\D/g, '');
-    if (!digitsOnly || digitsOnly.length < 10) {
-      nextErrors.whatsapp = 'Informe um WhatsApp válido com DDD.';
+    if (!digitsOnly || digitsOnly.length < 9) {
+      nextErrors.whatsapp = cs.errors.whatsapp;
     }
 
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!email.trim() || !emailRegex.test(email.trim())) {
-      nextErrors.email = 'Informe um endereço de e-mail válido.';
+      nextErrors.email = cs.errors.email;
     }
 
     if (!servico) {
-      nextErrors.servico = 'Selecione o serviço de interesse.';
+      nextErrors.servico = cs.errors.service;
     }
 
     if (!mensagem.trim() || mensagem.trim().length < 10) {
-      nextErrors.mensagem = 'Conte brevemente sobre o objetivo ou projeto.';
+      nextErrors.mensagem = cs.errors.message;
     }
 
     setErrors(nextErrors);
@@ -130,14 +116,10 @@ export const ContactSection: React.FC<ContactSectionProps> = ({
       if (response.ok && data.success) {
         setSubmitted(true);
       } else {
-        setSubmitError(
-          data.message || 'Ocorreu um erro ao enviar sua mensagem. Tente novamente.'
-        );
+        setSubmitError(data.message || cs.errors.genericSubmit);
       }
-    } catch (err) {
-      setSubmitError(
-        'Não foi possível enviar a mensagem. Verifique sua conexão de internet e tente novamente.'
-      );
+    } catch {
+      setSubmitError(cs.errors.connectionError);
     } finally {
       setIsSubmitting(false);
     }
@@ -168,7 +150,7 @@ export const ContactSection: React.FC<ContactSectionProps> = ({
           <div className="flex items-center gap-3 mb-4">
             <span className="w-5 h-[1.5px] bg-[#C6FF00]" />
             <span className="font-mono-tabular text-xs uppercase tracking-[0.2em] text-[#F4F4F1]/60 font-semibold">
-              ATENDIMENTO DIRETO
+              {cs.kicker}
             </span>
           </div>
 
@@ -180,8 +162,8 @@ export const ContactSection: React.FC<ContactSectionProps> = ({
             transition={{ duration: 0.45 }}
             className="font-display font-bold uppercase text-3xl sm:text-5xl lg:text-[3.5rem] leading-[0.98] tracking-[-0.035em] text-[#F4F4F1]"
           >
-            FALE DIRETAMENTE
-            <span className="block mt-2 text-[#C6FF00]">COM A NOSSA EQUIPE.</span>
+            {cs.headingLine1}
+            <span className="block mt-2 text-[#C6FF00]">{cs.headingLine2}</span>
           </motion.h1>
 
           <motion.p
@@ -191,13 +173,13 @@ export const ContactSection: React.FC<ContactSectionProps> = ({
             transition={{ duration: 0.45, delay: 0.1 }}
             className="mt-5 text-base sm:text-xl text-[#F4F4F1]/85 leading-relaxed max-w-2xl font-light"
           >
-            Escolha com quem deseja conversar e fale diretamente pelo WhatsApp.
+            {cs.subtitle}
           </motion.p>
         </div>
 
         {/* 2. CARDS DE ATENDIMENTO DIRETO (FELIPE & PIETRO) */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 lg:gap-8 mb-8">
-          {DIRECT_TEAM_CONTACTS.map((contact: DirectTeamContact) => (
+          {directContacts.map((contact) => (
             <motion.div
               key={contact.id}
               initial={{ opacity: 0, y: 16 }}
@@ -249,10 +231,10 @@ export const ContactSection: React.FC<ContactSectionProps> = ({
         {/* 3. TEXTO DE APOIO */}
         <div className="pt-2 pb-12 border-b border-[#F4F4F1]/12 mb-12 sm:mb-16">
           <p className="font-mono-tabular text-xs sm:text-sm uppercase tracking-[0.2em] text-[#C6FF00] font-bold mb-1.5">
-            ATENDIMENTO DIRETO, SEM INTERMEDIÁRIOS.
+            {cs.directSupportTitle}
           </p>
           <p className="text-sm sm:text-base text-[#F4F4F1]/70 leading-relaxed">
-            Se preferir, envie seus dados pelo formulário e nossa equipe entra em contato.
+            {cs.directSupportSubtitle}
           </p>
         </div>
 
@@ -262,10 +244,10 @@ export const ContactSection: React.FC<ContactSectionProps> = ({
             <div className="border border-[#F4F4F1]/12 bg-[#121212]/60 p-6 sm:p-10 lg:p-12">
               <div className="mb-8 pb-6 border-b border-[#F4F4F1]/10">
                 <span className="font-mono-tabular text-xs uppercase tracking-[0.2em] text-[#C6FF00] font-semibold block mb-2">
-                  FORMULÁRIO DE PROJETO
+                  {cs.formKicker}
                 </span>
                 <h2 className="font-display font-bold uppercase text-2xl sm:text-3xl text-[#F4F4F1]">
-                  ENVIE OS DETALHES DO SEU NEGÓCIO.
+                  {cs.formTitle}
                 </h2>
               </div>
 
@@ -283,19 +265,16 @@ export const ContactSection: React.FC<ContactSectionProps> = ({
 
                   <div className="space-y-2">
                     <span className="font-mono-tabular text-xs uppercase tracking-[0.2em] text-[#C6FF00]">
-                      SOLICITAÇÃO REGISTRADA
+                      {cs.successBadge}
                     </span>
-                    <h3 className="font-display font-bold text-2xl sm:text-3xl text-[#F4F4F1] tracking-tight">
-                      Recebemos sua solicitação.
-                      <br />
-                      Em breve entraremos em contato.
+                    <h3 className="font-display font-bold text-2xl sm:text-3xl text-[#F4F4F1] tracking-tight whitespace-pre-line">
+                      {cs.successTitle}
                     </h3>
                   </div>
 
                   <p className="text-sm text-[#F4F4F1]/70 max-w-md leading-relaxed">
-                    Resumo enviado por <strong className="text-[#F4F4F1]">{nome}</strong> (
-                    {empresa}) referente a{' '}
-                    <strong className="text-[#C6FF00]">{servico}</strong>.
+                    {cs.successSummary} <strong className="text-[#F4F4F1]">{nome}</strong> (
+                    {empresa}) - <strong className="text-[#C6FF00]">{servico}</strong>.
                   </p>
 
                   <div className="pt-4 flex flex-wrap items-center gap-4 border-t border-[#F4F4F1]/10">
@@ -305,7 +284,7 @@ export const ContactSection: React.FC<ContactSectionProps> = ({
                       className="inline-flex items-center gap-2 px-5 py-3 bg-[#C6FF00] text-[#0A0A0A] text-xs font-bold uppercase tracking-wider hover:bg-[#d4ff33] transition-colors cursor-pointer"
                     >
                       <RotateCcw className="w-3.5 h-3.5" />
-                      <span>Enviar nova solicitação</span>
+                      <span>{cs.newSubmissionButton}</span>
                     </button>
                   </div>
                 </motion.div>
@@ -317,7 +296,7 @@ export const ContactSection: React.FC<ContactSectionProps> = ({
                         htmlFor="contact-nome"
                         className="block font-mono-tabular text-xs uppercase tracking-[0.14em] text-[#F4F4F1]/70 mb-2"
                       >
-                        Nome <span className="text-[#C6FF00]">*</span>
+                        {cs.nameLabel} <span className="text-[#C6FF00]">*</span>
                       </label>
                       <input
                         id="contact-nome"
@@ -327,7 +306,7 @@ export const ContactSection: React.FC<ContactSectionProps> = ({
                           setNome(e.target.value);
                           if (errors.nome) setErrors({ ...errors, nome: '' });
                         }}
-                        placeholder="Seu nome completo"
+                        placeholder={cs.namePlaceholder}
                         className={`w-full bg-[#0A0A0A] border px-4 py-3.5 text-sm text-[#F4F4F1] placeholder:text-[#F4F4F1]/30 focus:outline-none transition-colors ${
                           errors.nome
                             ? 'border-red-400'
@@ -347,7 +326,7 @@ export const ContactSection: React.FC<ContactSectionProps> = ({
                         htmlFor="contact-empresa"
                         className="block font-mono-tabular text-xs uppercase tracking-[0.14em] text-[#F4F4F1]/70 mb-2"
                       >
-                        Empresa <span className="text-[#C6FF00]">*</span>
+                        {cs.companyLabel} <span className="text-[#C6FF00]">*</span>
                       </label>
                       <input
                         id="contact-empresa"
@@ -357,7 +336,7 @@ export const ContactSection: React.FC<ContactSectionProps> = ({
                           setEmpresa(e.target.value);
                           if (errors.empresa) setErrors({ ...errors, empresa: '' });
                         }}
-                        placeholder="Nome da sua empresa ou marca"
+                        placeholder={cs.companyPlaceholder}
                         className={`w-full bg-[#0A0A0A] border px-4 py-3.5 text-sm text-[#F4F4F1] placeholder:text-[#F4F4F1]/30 focus:outline-none transition-colors ${
                           errors.empresa
                             ? 'border-red-400'
@@ -379,7 +358,7 @@ export const ContactSection: React.FC<ContactSectionProps> = ({
                         htmlFor="contact-whatsapp"
                         className="block font-mono-tabular text-xs uppercase tracking-[0.14em] text-[#F4F4F1]/70 mb-2"
                       >
-                        WhatsApp <span className="text-[#C6FF00]">*</span>
+                        {cs.whatsappLabel} <span className="text-[#C6FF00]">*</span>
                       </label>
                       <input
                         id="contact-whatsapp"
@@ -389,7 +368,7 @@ export const ContactSection: React.FC<ContactSectionProps> = ({
                           setWhatsapp(e.target.value);
                           if (errors.whatsapp) setErrors({ ...errors, whatsapp: '' });
                         }}
-                        placeholder="(11) 99999-9999"
+                        placeholder={cs.whatsappPlaceholder}
                         className={`w-full bg-[#0A0A0A] border px-4 py-3.5 text-sm text-[#F4F4F1] placeholder:text-[#F4F4F1]/30 focus:outline-none transition-colors ${
                           errors.whatsapp
                             ? 'border-red-400'
@@ -409,7 +388,7 @@ export const ContactSection: React.FC<ContactSectionProps> = ({
                         htmlFor="contact-email"
                         className="block font-mono-tabular text-xs uppercase tracking-[0.14em] text-[#F4F4F1]/70 mb-2"
                       >
-                        E-mail <span className="text-[#C6FF00]">*</span>
+                        {cs.emailLabel} <span className="text-[#C6FF00]">*</span>
                       </label>
                       <input
                         id="contact-email"
@@ -419,7 +398,7 @@ export const ContactSection: React.FC<ContactSectionProps> = ({
                           setEmail(e.target.value);
                           if (errors.email) setErrors({ ...errors, email: '' });
                         }}
-                        placeholder="voce@empresa.com"
+                        placeholder={cs.emailPlaceholder}
                         className={`w-full bg-[#0A0A0A] border px-4 py-3.5 text-sm text-[#F4F4F1] placeholder:text-[#F4F4F1]/30 focus:outline-none transition-colors ${
                           errors.email
                             ? 'border-red-400'
@@ -437,14 +416,14 @@ export const ContactSection: React.FC<ContactSectionProps> = ({
 
                   <div>
                     <label className="block font-mono-tabular text-xs uppercase tracking-[0.14em] text-[#F4F4F1]/70 mb-3">
-                      Serviço de interesse <span className="text-[#C6FF00]">*</span>
+                      {cs.serviceLabel} <span className="text-[#C6FF00]">*</span>
                     </label>
                     <div
                       role="radiogroup"
-                      aria-label="Serviço de interesse"
+                      aria-label={cs.serviceLabel}
                       className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-2.5"
                     >
-                      {SERVICE_OPTIONS.map((option) => {
+                      {cs.serviceOptions.map((option) => {
                         const active = servico === option;
                         return (
                           <button
@@ -476,7 +455,7 @@ export const ContactSection: React.FC<ContactSectionProps> = ({
                       htmlFor="contact-mensagem"
                       className="block font-mono-tabular text-xs uppercase tracking-[0.14em] text-[#F4F4F1]/70 mb-2"
                     >
-                      Conte um pouco sobre o projeto <span className="text-[#C6FF00]">*</span>
+                      {cs.messageLabel} <span className="text-[#C6FF00]">*</span>
                     </label>
                     <textarea
                       id="contact-mensagem"
@@ -486,7 +465,7 @@ export const ContactSection: React.FC<ContactSectionProps> = ({
                         setMensagem(e.target.value);
                         if (errors.mensagem) setErrors({ ...errors, mensagem: '' });
                       }}
-                      placeholder="Qual o momento atual da empresa, objetivos e o que você busca estruturar?"
+                      placeholder={cs.messagePlaceholder}
                       className={`w-full bg-[#0A0A0A] border px-4 py-3.5 text-sm text-[#F4F4F1] placeholder:text-[#F4F4F1]/30 focus:outline-none transition-colors resize-y ${
                         errors.mensagem
                           ? 'border-red-400'
@@ -516,7 +495,7 @@ export const ContactSection: React.FC<ContactSectionProps> = ({
                       className="w-full sm:w-auto inline-flex items-center justify-center gap-3 px-8 py-4 bg-[#C6FF00] text-[#0A0A0A] text-xs sm:text-sm font-bold uppercase tracking-[0.1em] hover:bg-[#d4ff33] disabled:opacity-60 transition-colors cursor-pointer whitespace-nowrap"
                     >
                       <span>
-                        {isSubmitting ? 'ENVIANDO PROJETO...' : 'ENVIAR PROJETO'}
+                        {isSubmitting ? cs.submittingButton : cs.submitButton}
                       </span>
                       <ArrowUpRight className="w-4 h-4 stroke-[2.5]" />
                     </button>
@@ -531,7 +510,7 @@ export const ContactSection: React.FC<ContactSectionProps> = ({
             <div className="border border-[#F4F4F1]/12 bg-[#121212]/40 p-6 sm:p-8 space-y-6">
               <div>
                 <span className="font-mono-tabular text-[11px] uppercase tracking-[0.2em] text-[#F4F4F1]/45 block mb-2">
-                  E-MAIL COMERCIAL
+                  {cs.emailCommercialTitle}
                 </span>
                 <a
                   href={`mailto:${BRAND_CONFIG.email}`}
@@ -543,7 +522,7 @@ export const ContactSection: React.FC<ContactSectionProps> = ({
 
               <div className="pt-4 border-t border-[#F4F4F1]/10 space-y-3">
                 <span className="font-mono-tabular text-[11px] uppercase tracking-[0.2em] text-[#F4F4F1]/45 block">
-                  REDES OFICIAIS
+                  {cs.officialNetworksTitle}
                 </span>
                 <div className="flex flex-col gap-2 font-mono-tabular text-xs uppercase tracking-wider text-[#F4F4F1]/80">
                   <a
@@ -560,10 +539,10 @@ export const ContactSection: React.FC<ContactSectionProps> = ({
 
               <div className="pt-4 border-t border-[#F4F4F1]/10">
                 <span className="font-mono-tabular text-[10px] uppercase tracking-[0.16em] text-[#F4F4F1]/40 block">
-                  PRESENÇA INTERNACIONAL
+                  {cs.internationalPresenceTitle}
                 </span>
                 <p className="text-xs text-[#F4F4F1]/70 mt-1 font-mono-tabular">
-                  BRASIL · PORTUGAL
+                  {cs.marketsText}
                 </p>
               </div>
             </div>

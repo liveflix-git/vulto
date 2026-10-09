@@ -2,22 +2,32 @@ import React, { useState, useEffect, useRef } from 'react';
 import { ChevronDown, ArrowUpRight, Menu, X } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 import { BrandLogo } from './BrandLogo';
-import { SERVICES_DATA } from '../data/siteData';
 import { BrazilFlag, PortugalFlag } from './FlagIcons';
+import { useLanguage } from '../context/LanguageContext';
 
 interface HeaderProps {
   currentPath: string;
   onNavigate: (path: string) => void;
-  currentLocale: 'pt-BR' | 'pt-PT';
-  onLocaleChange: (locale: 'pt-BR' | 'pt-PT') => void;
+  currentLocale?: 'pt-BR' | 'pt-PT';
+  onLocaleChange?: (locale: 'pt-BR' | 'pt-PT') => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
   currentPath,
   onNavigate,
-  currentLocale,
-  onLocaleChange,
+  currentLocale: propsLocale,
+  onLocaleChange: propsLocaleChange,
 }) => {
+  const { language, setLanguage, dict, services } = useLanguage();
+  const currentLocale = propsLocale || language;
+
+  const handleLocaleSelect = (newLocale: 'pt-BR' | 'pt-PT') => {
+    setLanguage(newLocale);
+    if (propsLocaleChange) {
+      propsLocaleChange(newLocale);
+    }
+  };
+
   const [scrolled, setScrolled] = useState(false);
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [localeDropdownOpen, setLocaleDropdownOpen] = useState(false);
@@ -123,7 +133,7 @@ export const Header: React.FC<HeaderProps> = ({
               currentPath === '/' ? 'text-[#F4F4F1]' : 'text-[#F4F4F1]/70 hover:text-[#F4F4F1]'
             }`}
           >
-            Início
+            {dict.header.home}
             <span
               className={`absolute bottom-0 left-0 h-[1.5px] bg-[#C6FF00] transition-transform duration-200 origin-left w-full ${
                 currentPath === '/' ? 'scale-x-100' : 'scale-x-0 group-hover:scale-x-100'
@@ -147,7 +157,7 @@ export const Header: React.FC<HeaderProps> = ({
                 isServicesActive ? 'text-[#F4F4F1]' : 'text-[#F4F4F1]/70 hover:text-[#F4F4F1]'
               }`}
             >
-              <span>Serviços</span>
+              <span>{dict.header.services}</span>
               <ChevronDown
                 className={`w-3.5 h-3.5 transition-transform duration-200 ${
                   dropdownOpen ? 'rotate-180 text-[#C6FF00]' : 'text-[#F4F4F1]/50'
@@ -174,20 +184,20 @@ export const Header: React.FC<HeaderProps> = ({
                   <div className="bg-[#F4F4F1] text-[#0A0A0A] rounded-md shadow-[0_16px_40px_rgba(0,0,0,0.45)] border border-[#0A0A0A]/10 overflow-hidden p-2">
                     <div className="px-3 py-2 border-b border-[#0A0A0A]/10 flex items-center justify-between">
                       <span className="font-mono-tabular text-[10px] tracking-widest uppercase text-[#0A0A0A]/50">
-                        ESTRUTURA &amp; SERVIÇOS
+                        {dict.header.structureAndServices}
                       </span>
                       <a
                         href="/servicos"
                         onClick={(e) => handleLinkClick(e, '/servicos')}
                         className="text-[10px] font-bold uppercase tracking-wider text-[#0A0A0A]/80 hover:text-[#0A0A0A] inline-flex items-center gap-0.5"
                       >
-                        Ver todas
+                        {dict.header.seeAll}
                         <ArrowUpRight className="w-3 h-3" />
                       </a>
                     </div>
 
                     <ul className="py-1.5 divide-y divide-[#0A0A0A]/[0.06]" role="menu">
-                      {SERVICES_DATA.map((service) => {
+                      {services.map((service) => {
                         const itemPath = `/${service.slug}`;
                         const active = currentPath === itemPath;
                         return (
@@ -240,7 +250,7 @@ export const Header: React.FC<HeaderProps> = ({
               currentPath === '/cases' ? 'text-[#F4F4F1]' : 'text-[#F4F4F1]/70 hover:text-[#F4F4F1]'
             }`}
           >
-            Cases
+            {dict.header.cases}
             <span
               className={`absolute bottom-0 left-0 h-[1.5px] bg-[#C6FF00] transition-transform duration-200 origin-left w-full ${
                 currentPath === '/cases' ? 'scale-x-100' : 'scale-x-0 group-hover:scale-x-100'
@@ -255,7 +265,7 @@ export const Header: React.FC<HeaderProps> = ({
               currentPath === '/sobre' ? 'text-[#F4F4F1]' : 'text-[#F4F4F1]/70 hover:text-[#F4F4F1]'
             }`}
           >
-            Sobre
+            {dict.header.about}
             <span
               className={`absolute bottom-0 left-0 h-[1.5px] bg-[#C6FF00] transition-transform duration-200 origin-left w-full ${
                 currentPath === '/sobre' ? 'scale-x-100' : 'scale-x-0 group-hover:scale-x-100'
@@ -270,7 +280,7 @@ export const Header: React.FC<HeaderProps> = ({
               currentPath === '/contato' ? 'text-[#F4F4F1]' : 'text-[#F4F4F1]/70 hover:text-[#F4F4F1]'
             }`}
           >
-            Contato
+            {dict.header.contact}
             <span
               className={`absolute bottom-0 left-0 h-[1.5px] bg-[#C6FF00] transition-transform duration-200 origin-left w-full ${
                 currentPath === '/contato' ? 'scale-x-100' : 'scale-x-0 group-hover:scale-x-100'
@@ -287,7 +297,7 @@ export const Header: React.FC<HeaderProps> = ({
               type="button"
               onClick={() => setLocaleDropdownOpen((prev) => !prev)}
               aria-expanded={localeDropdownOpen}
-              aria-label="Selecionar localização e idioma"
+              aria-label={dict.header.selectLanguage}
               className="px-3 py-1.5 border border-[#2A2A2A] hover:border-[#C6FF00] bg-[#0A0A0A] text-[#F4F4F1] font-mono-tabular text-xs uppercase tracking-wider inline-flex items-center gap-2 transition-colors cursor-pointer"
             >
               <span className="flex items-center gap-2">
@@ -323,7 +333,7 @@ export const Header: React.FC<HeaderProps> = ({
                     <button
                       type="button"
                       onClick={() => {
-                        onLocaleChange('pt-BR');
+                        handleLocaleSelect('pt-BR');
                         setLocaleDropdownOpen(false);
                       }}
                       className={`w-full px-3 py-2 text-left font-mono-tabular text-xs flex items-center justify-between transition-colors cursor-pointer ${
@@ -334,7 +344,7 @@ export const Header: React.FC<HeaderProps> = ({
                     >
                       <span className="flex items-center gap-2">
                         <BrazilFlag className="w-4.5 h-3" />
-                        <span>Brasil</span>
+                        <span>{dict.header.brazil}</span>
                       </span>
                       {currentLocale === 'pt-BR' && <span>✓</span>}
                     </button>
@@ -342,7 +352,7 @@ export const Header: React.FC<HeaderProps> = ({
                     <button
                       type="button"
                       onClick={() => {
-                        onLocaleChange('pt-PT');
+                        handleLocaleSelect('pt-PT');
                         setLocaleDropdownOpen(false);
                       }}
                       className={`w-full px-3 py-2 text-left font-mono-tabular text-xs flex items-center justify-between transition-colors cursor-pointer ${
@@ -353,7 +363,7 @@ export const Header: React.FC<HeaderProps> = ({
                     >
                       <span className="flex items-center gap-2">
                         <PortugalFlag className="w-4.5 h-3" />
-                        <span>Portugal</span>
+                        <span>{dict.header.portugal}</span>
                       </span>
                       {currentLocale === 'pt-PT' && <span>✓</span>}
                     </button>
@@ -369,7 +379,7 @@ export const Header: React.FC<HeaderProps> = ({
             data-cursor="cta"
             className="hidden sm:inline-flex items-center gap-2 px-5 py-2.5 bg-[#C6FF00] text-[#0A0A0A] text-xs font-bold uppercase tracking-[0.08em] hover:bg-[#d4ff33] transition-colors duration-150 whitespace-nowrap shrink-0"
           >
-            <span>VAMOS CONVERSAR</span>
+            <span>{dict.header.ctaTalk}</span>
             <ArrowUpRight className="w-3.5 h-3.5 stroke-[2.5]" />
           </a>
 
@@ -405,7 +415,7 @@ export const Header: React.FC<HeaderProps> = ({
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
-                    onClick={() => onLocaleChange('pt-BR')}
+                    onClick={() => handleLocaleSelect('pt-BR')}
                     className={`px-3 py-1.5 font-mono-tabular text-xs transition-colors cursor-pointer inline-flex items-center gap-1.5 ${
                       currentLocale === 'pt-BR'
                         ? 'bg-[#C6FF00] text-[#0A0A0A] font-bold'
@@ -417,7 +427,7 @@ export const Header: React.FC<HeaderProps> = ({
                   </button>
                   <button
                     type="button"
-                    onClick={() => onLocaleChange('pt-PT')}
+                    onClick={() => handleLocaleSelect('pt-PT')}
                     className={`px-3 py-1.5 font-mono-tabular text-xs transition-colors cursor-pointer inline-flex items-center gap-1.5 ${
                       currentLocale === 'pt-PT'
                         ? 'bg-[#C6FF00] text-[#0A0A0A] font-bold'
@@ -437,7 +447,7 @@ export const Header: React.FC<HeaderProps> = ({
                   currentPath === '/' ? 'text-[#C6FF00]' : 'text-[#F4F4F1]'
                 }`}
               >
-                <span>Início</span>
+                <span>{dict.header.home}</span>
                 <span className="font-mono-tabular text-xs text-[#F4F4F1]/40">01</span>
               </a>
 
@@ -448,7 +458,7 @@ export const Header: React.FC<HeaderProps> = ({
                   aria-expanded={mobileServicesOpen}
                   className="w-full py-3.5 text-base font-display font-semibold tracking-tight flex items-center justify-between text-[#F4F4F1] cursor-pointer"
                 >
-                  <span className={isServicesActive ? 'text-[#C6FF00]' : ''}>Serviços</span>
+                  <span className={isServicesActive ? 'text-[#C6FF00]' : ''}>{dict.header.services}</span>
                   <ChevronDown
                     className={`w-4 h-4 transition-transform duration-200 ${
                       mobileServicesOpen ? 'rotate-180 text-[#C6FF00]' : 'text-[#F4F4F1]/50'
@@ -471,10 +481,10 @@ export const Header: React.FC<HeaderProps> = ({
                           onClick={(e) => handleLinkClick(e, '/servicos')}
                           className="py-2 px-3 text-xs font-mono-tabular uppercase tracking-wider text-[#C6FF00] flex items-center justify-between"
                         >
-                          <span>Visão geral de soluções</span>
+                          <span>{dict.header.structureAndServices}</span>
                           <ArrowUpRight className="w-3.5 h-3.5" />
                         </a>
-                        {SERVICES_DATA.map((service) => {
+                        {services.map((service) => {
                           const itemPath = `/${service.slug}`;
                           return (
                             <a
@@ -507,7 +517,7 @@ export const Header: React.FC<HeaderProps> = ({
                   currentPath === '/cases' ? 'text-[#C6FF00]' : 'text-[#F4F4F1]'
                 }`}
               >
-                <span>Cases</span>
+                <span>{dict.header.cases}</span>
                 <span className="font-mono-tabular text-xs text-[#F4F4F1]/40">03</span>
               </a>
 
@@ -518,7 +528,7 @@ export const Header: React.FC<HeaderProps> = ({
                   currentPath === '/sobre' ? 'text-[#C6FF00]' : 'text-[#F4F4F1]'
                 }`}
               >
-                <span>Sobre</span>
+                <span>{dict.header.about}</span>
                 <span className="font-mono-tabular text-xs text-[#F4F4F1]/40">04</span>
               </a>
 
@@ -529,7 +539,7 @@ export const Header: React.FC<HeaderProps> = ({
                   currentPath === '/contato' ? 'text-[#C6FF00]' : 'text-[#F4F4F1]'
                 }`}
               >
-                <span>Contato</span>
+                <span>{dict.header.contact}</span>
                 <span className="font-mono-tabular text-xs text-[#F4F4F1]/40">05</span>
               </a>
 
@@ -539,7 +549,7 @@ export const Header: React.FC<HeaderProps> = ({
                   onClick={(e) => handleLinkClick(e, '/contato')}
                   className="w-full py-3.5 px-5 bg-[#C6FF00] text-[#0A0A0A] text-xs font-bold uppercase tracking-[0.1em] flex items-center justify-center gap-2"
                 >
-                  <span>VAMOS CONVERSAR</span>
+                  <span>{dict.header.ctaTalk}</span>
                   <ArrowUpRight className="w-4 h-4 stroke-[2.5]" />
                 </a>
               </div>

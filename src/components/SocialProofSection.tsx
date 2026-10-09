@@ -1,8 +1,12 @@
 import React from 'react';
 import { motion } from 'motion/react';
 import { CORPORATE_PARTNERS, CREATOR_PARTNERS } from '../data/siteData';
+import { useLanguage } from '../context/LanguageContext';
 
 export const SocialProofSection: React.FC = () => {
+  const { dict } = useLanguage();
+  const sp = dict.socialProof;
+
   return (
     <section
       aria-labelledby="social-proof-heading"
@@ -15,7 +19,7 @@ export const SocialProofSection: React.FC = () => {
             <div className="flex items-center gap-3 mb-4">
               <span className="w-5 h-[1.5px] bg-[#C6FF00]" />
               <span className="font-mono-tabular text-xs uppercase tracking-[0.2em] text-[#C6FF00]">
-                MARCAS &amp; PROJETOS
+                {sp.kicker}
               </span>
             </div>
             <motion.h2
@@ -26,19 +30,19 @@ export const SocialProofSection: React.FC = () => {
               transition={{ duration: 0.45 }}
               className="font-display font-bold uppercase text-3xl sm:text-5xl tracking-[-0.035em] text-[#F4F4F1] max-w-3xl"
             >
-              EXPERIÊNCIA CONSTRUÍDA AO LADO DE MARCAS E AUDIÊNCIAS REAIS<span className="text-[#C6FF00]">.</span>
+              {sp.heading}
             </motion.h2>
           </div>
 
           <p className="font-mono-tabular text-xs uppercase tracking-[0.14em] text-[#F4F4F1]/60 max-w-sm leading-relaxed">
-            Empresas, criadores e operações digitais no Brasil e em Portugal.
+            {sp.subheading}
           </p>
         </div>
 
         {/* Grade de Marcas Corporativas */}
         <div className="pt-12">
           <span className="font-mono-tabular text-[11px] uppercase tracking-[0.2em] text-[#F4F4F1]/45 block mb-6">
-            OPERAÇÕES CORPORATIVAS &amp; VAREJO
+            {sp.corporateTitle}
           </span>
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 border border-[#F4F4F1]/12 divide-x divide-y md:divide-y-0 divide-[#F4F4F1]/12 bg-[#1A1A1A]/30">
             {CORPORATE_PARTNERS.map((brand) => (
@@ -60,7 +64,7 @@ export const SocialProofSection: React.FC = () => {
         {/* Grade de Criadores e Audiências Massivas */}
         <div className="pt-14">
           <span className="font-mono-tabular text-[11px] uppercase tracking-[0.2em] text-[#C6FF00] block mb-6">
-            CRIADORES &amp; AUDIÊNCIAS MASSIVAS (+2 BI VIEWS)
+            {sp.creatorsTitle} ({sp.creatorsHighlightNumber})
           </span>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 border border-[#F4F4F1]/12 divide-y sm:divide-y-0 sm:divide-x divide-[#F4F4F1]/12 bg-[#1A1A1A]/30">
             {CREATOR_PARTNERS.map((creator) => (

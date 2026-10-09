@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
-  Kanban,
   ListFilter,
   Plus,
   Clock,
@@ -21,9 +20,6 @@ import {
   RefreshCw,
   ExternalLink,
   ChevronRight,
-  Code2,
-  Copy,
-  Check,
   Flame,
   ArrowRight,
   TrendingUp,
@@ -57,7 +53,7 @@ import {
   ProfileUser,
 } from '../../services/crmService';
 
-const KANBAN_STAGES: ProjectStatus[] = [
+const PROJECT_STAGES: ProjectStatus[] = [
   'BACKLOG',
   'A FAZER',
   'EM ANDAMENTO',
@@ -75,25 +71,16 @@ export function ProjectsViewReal() {
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
 
-  // View Mode
-  const [viewMode, setViewMode] = useState<'kanban' | 'list'>('kanban');
-
   // Filters & Search
   const [searchTerm, setSearchTerm] = useState<string>('');
+  const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [priorityFilter, setPriorityFilter] = useState<string>('ALL');
   const [delayedOnly, setDelayedOnly] = useState<boolean>(false);
   const [responsibleFilter, setResponsibleFilter] = useState<string>('ALL');
 
-  // Modals
+  // Modals & Selection
   const [isNewProjectModalOpen, setIsNewProjectModalOpen] = useState<boolean>(false);
   const [selectedProject, setSelectedProject] = useState<ProjectItem | null>(null);
-  const [isEditModalOpen, setIsEditModalOpen] = useState<boolean>(false);
-  const [isSqlModalOpen, setIsSqlModalOpen] = useState<boolean>(false);
-  const [sqlCopied, setSqlCopied] = useState<boolean>(false);
-
-  // Drag and drop state
-  const [draggedProjectId, setDraggedProjectId] = useState<string | null>(null);
-  const [dragOverColumn, setDragOverColumn] = useState<ProjectStatus | null>(null);
 
   // Quick task input in detail drawer
   const [newQuickTaskTitle, setNewQuickTaskTitle] = useState<string>('');
@@ -158,6 +145,11 @@ export function ProjectsViewReal() {
         }
       }
 
+      // Status
+      if (statusFilter !== 'ALL' && p.status !== statusFilter) {
+        return false;
+      }
+
       // Priority
       if (priorityFilter !== 'ALL' && p.priority !== priorityFilter) {
         return false;
@@ -177,82 +169,7 @@ export function ProjectsViewReal() {
 
       return true;
     });
-  }, [projects, searchTerm, priorityFilter, delayedOnly, responsibleFilter]);
-
-  // Group by status for Kanban
-  const kanbanColumns = useMemo(() => {
-    const map: Record<ProjectStatus, ProjectItem[]> = {
-      BACKLOG: [],
-      'A FAZER': [],
-      'EM ANDAMENTO': [],
-      'AGUARDANDO CLIENTE': [],
-      REVISÃO: [],
-      CONCLUÍDO: [],
-    };
-
-    filteredProjects.forEach((p) => {
-      if (map[p.status]) {
-        map[p.status].push(p);
-      } else {
-        map['A FAZER'].push(p);
-      }
-    });
-
-    return map;
-  }, [filteredProjects]);
-
-  // -------------------------------------------------------------
-  // HANDLERS: DRAG AND DROP
-  // -------------------------------------------------------------
-  const handleDragStart = (e: React.DragEvent, projectId: string) => {
-    e.dataTransfer.setData('text/plain', projectId);
-    setDraggedProjectId(projectId);
-  };
-
-  const handleDragOver = (e: React.DragEvent, status: ProjectStatus) => {
-    e.preventDefault();
-    if (dragOverColumn !== status) {
-      setDragOverColumn(status);
-    }
-  };
-
-  const handleDragLeave = () => {
-    setDragOverColumn(null);
-  };
-
-  const handleDrop = async (e: React.DragEvent, targetStatus: ProjectStatus) => {
-    e.preventDefault();
-    setDragOverColumn(null);
-    const projectId = e.dataTransfer.getData('text/plain') || draggedProjectId;
-    if (!projectId) return;
-
-    const currentProject = projects.find((p) => p.id === projectId);
-    if (!currentProject || currentProject.status === targetStatus) return;
-
-    // Optimistic update
-    const previousProjects = [...projects];
-    setProjects((prev) =>
-      prev.map((p) =>
-        p.id === projectId
-          ? {
-              ...p,
-              status: targetStatus,
-              is_delayed: isProjectDelayed(p.deadline, targetStatus),
-            }
-          : p
-      )
-    );
-
-    const success = await updateProjectStatus(projectId, targetStatus);
-    if (!success) {
-      // Revert if failed
-      setProjects(previousProjects);
-    } else {
-      // Refresh background quietly
-      loadData(false);
-    }
-    setDraggedProjectId(null);
-  };
+  }, [projects, searchTerm, statusFilter, priorityFilter, delayedOnly, responsibleFilter]);
 
   // -------------------------------------------------------------
   // HANDLERS: TASKS
@@ -360,56 +277,6 @@ export function ProjectsViewReal() {
     }
   };
 
-  // Copy SQL Helper
-  const handleCopySql = () => {
-    const sqlContent = `-- ==============================================================================
--- VULTO LAB — CORE OS: MÓDULO PROJETOS & ENTREGAS (SPRINT DELIVERY)
--- ==============================================================================
-CREATE TABLE IF NOT EXISTS public.projects (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    name TEXT NOT NULL,
-    client_id UUID REFERENCES public.clients(id) ON DELETE SET NULL,
-    service_id UUID REFERENCES public.services(id) ON DELETE SET NULL,
-    description TEXT,
-    responsible_user_id UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
-    status TEXT NOT NULL DEFAULT 'A FAZER',
-    priority TEXT NOT NULL DEFAULT 'Normal',
-    start_date DATE DEFAULT CURRENT_DATE,
-    deadline DATE,
-    value NUMERIC(12, 2) DEFAULT 0.00,
-    notes TEXT,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
-CREATE TABLE IF NOT EXISTS public.project_tasks (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    project_id UUID NOT NULL REFERENCES public.projects(id) ON DELETE CASCADE,
-    title TEXT NOT NULL,
-    completed BOOLEAN NOT NULL DEFAULT false,
-    responsible_user_id UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
-ALTER TABLE public.projects ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.project_tasks ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY "Allow authenticated read on projects" ON public.projects FOR SELECT TO authenticated USING (true);
-CREATE POLICY "Allow authenticated insert on projects" ON public.projects FOR INSERT TO authenticated WITH CHECK (true);
-CREATE POLICY "Allow authenticated update on projects" ON public.projects FOR UPDATE TO authenticated USING (true);
-CREATE POLICY "Allow authenticated delete on projects" ON public.projects FOR DELETE TO authenticated USING (true);
-
-CREATE POLICY "Allow authenticated read on project_tasks" ON public.project_tasks FOR SELECT TO authenticated USING (true);
-CREATE POLICY "Allow authenticated insert on project_tasks" ON public.project_tasks FOR INSERT TO authenticated WITH CHECK (true);
-CREATE POLICY "Allow authenticated update on project_tasks" ON public.project_tasks FOR UPDATE TO authenticated USING (true);
-CREATE POLICY "Allow authenticated delete on project_tasks" ON public.project_tasks FOR DELETE TO authenticated USING (true);`;
-
-    navigator.clipboard.writeText(sqlContent);
-    setSqlCopied(true);
-    setTimeout(() => setSqlCopied(false), 2500);
-  };
-
   return (
     <div className="space-y-6">
       {/* ------------------------------------------------------------- */}
@@ -419,34 +286,23 @@ CREATE POLICY "Allow authenticated delete on project_tasks" ON public.project_ta
         <div>
           <div className="flex items-center gap-2 mb-1">
             <span className="text-[10px] font-mono tracking-widest text-[#C6FF00] uppercase">
-              // SPRINT DELIVERY & PROJETOS
+              // OPERAÇÃO & DEMANDAS
             </span>
             <span className="text-white/20">•</span>
             <span className="text-[10px] font-mono text-white/50 uppercase">
-              OPERAÇÃO TÉCNICA VULTO LAB
+              ENTREGAS VULTO LAB
             </span>
           </div>
           <h1 className="text-xl sm:text-2xl font-bold font-mono text-white tracking-tight">
             Gestão de Projetos & Entregas
           </h1>
           <p className="text-xs text-white/60 font-sans mt-0.5 max-w-2xl">
-            Acompanhe o ciclo de desenvolvimento, produção técnica e cronogramas de cada cliente.
-            Sincronizado em tempo real com o banco de dados Supabase.
+            Acompanhe o status de desenvolvimento, prazos de entrega e checklist técnico de cada cliente.
           </p>
         </div>
 
         {/* Top Actions */}
         <div className="flex flex-wrap items-center gap-2.5">
-          {/* SQL Schema helper */}
-          <button
-            onClick={() => setIsSqlModalOpen(true)}
-            className="px-3 py-2 bg-white/5 hover:bg-white/10 text-white/80 hover:text-white border border-white/10 text-xs font-mono flex items-center gap-1.5 transition-colors cursor-pointer"
-            title="Ver comandos SQL para o Supabase"
-          >
-            <Code2 className="w-3.5 h-3.5 text-[#C6FF00]" />
-            <span className="hidden sm:inline">Script SQL</span>
-          </button>
-
           {/* Refresh button */}
           <button
             onClick={() => loadData(true)}
@@ -456,32 +312,6 @@ CREATE POLICY "Allow authenticated delete on project_tasks" ON public.project_ta
             <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin text-[#C6FF00]' : ''}`} />
             <span className="hidden sm:inline">Atualizar</span>
           </button>
-
-          {/* View Mode Toggle */}
-          <div className="flex bg-[#161616] border border-white/10 p-0.5">
-            <button
-              onClick={() => setViewMode('kanban')}
-              className={`px-3 py-1.5 text-xs font-mono flex items-center gap-1.5 transition-colors cursor-pointer ${
-                viewMode === 'kanban'
-                  ? 'bg-[#C6FF00] text-[#0A0A0A] font-bold'
-                  : 'text-white/60 hover:text-white'
-              }`}
-            >
-              <Kanban className="w-3.5 h-3.5" />
-              <span>KANBAN</span>
-            </button>
-            <button
-              onClick={() => setViewMode('list')}
-              className={`px-3 py-1.5 text-xs font-mono flex items-center gap-1.5 transition-colors cursor-pointer ${
-                viewMode === 'list'
-                  ? 'bg-[#C6FF00] text-[#0A0A0A] font-bold'
-                  : 'text-white/60 hover:text-white'
-              }`}
-            >
-              <ListFilter className="w-3.5 h-3.5" />
-              <span>LISTA</span>
-            </button>
-          </div>
 
           {/* New Project Button */}
           <button
@@ -606,6 +436,23 @@ CREATE POLICY "Allow authenticated delete on project_tasks" ON public.project_ta
             </select>
           </div>
 
+          {/* Status filter */}
+          <div className="flex items-center gap-1.5 bg-[#161616] border border-white/10 px-2.5 py-1.5">
+            <span className="text-[10px] font-mono text-white/40">Status:</span>
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="bg-transparent text-xs font-mono text-white focus:outline-none cursor-pointer"
+            >
+              <option value="ALL" className="bg-[#161616]">Todos</option>
+              {PROJECT_STAGES.map((st) => (
+                <option key={st} value={st} className="bg-[#161616]">
+                  {st}
+                </option>
+              ))}
+            </select>
+          </div>
+
           {/* Responsible filter */}
           <div className="flex items-center gap-1.5 bg-[#161616] border border-white/10 px-2.5 py-1.5">
             <span className="text-[10px] font-mono text-white/40">Líder:</span>
@@ -615,11 +462,8 @@ CREATE POLICY "Allow authenticated delete on project_tasks" ON public.project_ta
               className="bg-transparent text-xs font-mono text-white focus:outline-none cursor-pointer"
             >
               <option value="ALL" className="bg-[#161616]">Todos</option>
-              {profiles.map((p) => (
-                <option key={p.id} value={p.id} className="bg-[#161616]">
-                  {p.full_name || p.email}
-                </option>
-              ))}
+              <option value="felipe" className="bg-[#161616]">Felipe</option>
+              <option value="pietro" className="bg-[#161616]">Pietro</option>
             </select>
           </div>
 
@@ -639,90 +483,10 @@ CREATE POLICY "Allow authenticated delete on project_tasks" ON public.project_ta
       </div>
 
       {/* ------------------------------------------------------------- */}
-      {/* VISUALIZAÇÃO: KANBAN */}
+      {/* VISUALIZAÇÃO: LISTA DE PROJETOS */}
       {/* ------------------------------------------------------------- */}
-      {viewMode === 'kanban' && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3.5 overflow-x-auto pb-4">
-          {KANBAN_STAGES.map((stage) => {
-            const config = PROJECT_STATUS_CONFIG[stage];
-            const columnProjects = kanbanColumns[stage];
-            const columnValue = columnProjects.reduce((acc, curr) => acc + (curr.value || 0), 0);
-            const isTargetColumn = dragOverColumn === stage;
-
-            return (
-              <div
-                key={stage}
-                onDragOver={(e) => handleDragOver(e, stage)}
-                onDragLeave={handleDragLeave}
-                onDrop={(e) => handleDrop(e, stage)}
-                className={`bg-[#111111] border flex flex-col min-h-[580px] transition-all duration-200 ${
-                  isTargetColumn
-                    ? 'border-[#C6FF00] bg-[#141812]'
-                    : 'border-white/10 hover:border-white/20'
-                }`}
-              >
-                {/* Column Header */}
-                <div className="p-3 border-b border-white/10 bg-[#0E0E0E]">
-                  <div className="flex items-center justify-between gap-1 mb-1">
-                    <span className={`text-[11px] font-mono font-bold tracking-wider ${config.color}`}>
-                      {stage}
-                    </span>
-                    <span className="text-[10px] font-mono px-1.5 py-0.5 bg-white/10 text-white/70 font-semibold rounded-sm">
-                      {columnProjects.length}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between text-[10px] font-mono text-white/40">
-                    <span>Total coluna:</span>
-                    <span className="text-white/80 font-semibold">{formatProjectCurrency(columnValue)}</span>
-                  </div>
-                </div>
-
-                {/* Column Body / Cards */}
-                <div className="p-2 space-y-2.5 flex-1 overflow-y-auto">
-                  {columnProjects.length === 0 ? (
-                    <div className="h-32 flex flex-col items-center justify-center text-center p-3 border border-dashed border-white/5 text-white/30 text-[11px] font-mono">
-                      <span>Nenhum projeto</span>
-                      <span className="text-[9px] text-white/20 mt-0.5">Arraste para cá</span>
-                    </div>
-                  ) : (
-                    columnProjects.map((proj) => (
-                      <ProjectCardItem
-                        key={proj.id}
-                        project={proj}
-                        onDragStart={(e) => handleDragStart(e, proj.id)}
-                        onSelect={() => setSelectedProject(proj)}
-                        onToggleTask={(taskId, completed) =>
-                          handleToggleTask(proj.id, taskId, completed)
-                        }
-                      />
-                    ))
-                  )}
-                </div>
-
-                {/* Quick Add Button */}
-                <div className="p-2 border-t border-white/5 bg-[#0E0E0E]/50">
-                  <button
-                    onClick={() => {
-                      setIsNewProjectModalOpen(true);
-                    }}
-                    className="w-full py-1.5 px-2 bg-white/5 hover:bg-white/10 text-white/50 hover:text-white text-[11px] font-mono flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
-                  >
-                    <Plus className="w-3 h-3" />
-                    <span>Adicionar</span>
-                  </button>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      {/* ------------------------------------------------------------- */}
-      {/* VISUALIZAÇÃO: LISTA */}
-      {/* ------------------------------------------------------------- */}
-      {viewMode === 'list' && (
-        <div className="bg-[#111111] border border-white/10 overflow-hidden">
-          <div className="overflow-x-auto">
+      <div className="bg-[#111111] border border-white/10 overflow-hidden">
+        <div className="overflow-x-auto">
             <table className="w-full text-left text-xs font-mono">
               <thead>
                 <tr className="border-b border-white/10 bg-[#0E0E0E] text-[10px] text-white/40 uppercase tracking-wider">
@@ -793,7 +557,7 @@ CREATE POLICY "Allow authenticated delete on project_tasks" ON public.project_ta
                         <td className="py-3 px-4 text-white/70">
                           <span className="flex items-center gap-1.5">
                             <User className="w-3 h-3 text-white/30" />
-                            {proj.responsible_name}
+                            {proj.responsible_name ? (proj.responsible_name.toLowerCase().includes('pietro') ? 'Pietro' : 'Felipe') : 'Felipe'}
                           </span>
                         </td>
 
@@ -818,7 +582,7 @@ CREATE POLICY "Allow authenticated delete on project_tasks" ON public.project_ta
                             }}
                             className={`px-2 py-1 text-[10px] font-bold border bg-[#161616] cursor-pointer focus:outline-none ${statusConf.badgeBg}`}
                           >
-                            {KANBAN_STAGES.map((st) => (
+                            {PROJECT_STAGES.map((st) => (
                               <option key={st} value={st} className="bg-[#161616] text-white">
                                 {st}
                               </option>
@@ -909,7 +673,6 @@ CREATE POLICY "Allow authenticated delete on project_tasks" ON public.project_ta
             </table>
           </div>
         </div>
-      )}
 
       {/* ------------------------------------------------------------- */}
       {/* DRAWER / MODAL: DETALHES DO PROJETO */}
@@ -981,7 +744,7 @@ CREATE POLICY "Allow authenticated delete on project_tasks" ON public.project_ta
               <div className="p-3 bg-[#161616] border border-white/5 space-y-2">
                 <div className="text-[10px] text-white/40 uppercase">Mudar Etapa do Fluxo:</div>
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
-                  {KANBAN_STAGES.map((st) => (
+                  {PROJECT_STAGES.map((st) => (
                     <button
                       key={st}
                       onClick={async () => {
@@ -1025,7 +788,11 @@ CREATE POLICY "Allow authenticated delete on project_tasks" ON public.project_ta
                   <div className="text-[10px] text-white/40 uppercase mb-0.5">Responsável</div>
                   <div className="text-white font-bold flex items-center gap-1.5">
                     <User className="w-3.5 h-3.5 text-white/30" />
-                    {selectedProject.responsible_name}
+                    {selectedProject.responsible_name
+                      ? selectedProject.responsible_name.toLowerCase().includes('pietro')
+                        ? 'Pietro'
+                        : 'Felipe'
+                      : 'Felipe'}
                   </div>
                 </div>
 
@@ -1213,197 +980,6 @@ CREATE POLICY "Allow authenticated delete on project_tasks" ON public.project_ta
           }}
         />
       )}
-
-      {/* ------------------------------------------------------------- */}
-      {/* MODAL: SQL SCHEMA VIEWER */}
-      {/* ------------------------------------------------------------- */}
-      {isSqlModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-          <div className="w-full max-w-3xl bg-[#111111] border border-white/10 p-5 space-y-4 shadow-2xl">
-            <div className="flex items-center justify-between pb-3 border-b border-white/10">
-              <div className="flex items-center gap-2">
-                <Code2 className="w-5 h-5 text-[#C6FF00]" />
-                <h3 className="font-mono text-base font-bold text-white">
-                  Estrutura SQL do Módulo de Projetos (Supabase)
-                </h3>
-              </div>
-              <button
-                onClick={() => setIsSqlModalOpen(false)}
-                className="text-white/60 hover:text-white p-1"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <p className="text-xs text-white/60 font-sans">
-              Copie o script abaixo e execute no <strong>SQL Editor</strong> do painel do Supabase
-              para criar as tabelas <code className="text-[#C6FF00]">projects</code> e{' '}
-              <code className="text-[#C6FF00]">project_tasks</code> com políticas de segurança RLS
-              automáticas:
-            </p>
-
-            <pre className="p-3 bg-[#0A0A0A] border border-white/10 text-[11px] font-mono text-zinc-300 max-h-72 overflow-y-auto overflow-x-auto leading-relaxed">
-{`-- Execute no Supabase SQL Editor:
-CREATE TABLE IF NOT EXISTS public.projects (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    name TEXT NOT NULL,
-    client_id UUID REFERENCES public.clients(id) ON DELETE SET NULL,
-    service_id UUID REFERENCES public.services(id) ON DELETE SET NULL,
-    description TEXT,
-    responsible_user_id UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
-    status TEXT NOT NULL DEFAULT 'A FAZER',
-    priority TEXT NOT NULL DEFAULT 'Normal',
-    start_date DATE DEFAULT CURRENT_DATE,
-    deadline DATE,
-    value NUMERIC(12, 2) DEFAULT 0.00,
-    notes TEXT,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
-CREATE TABLE IF NOT EXISTS public.project_tasks (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    project_id UUID NOT NULL REFERENCES public.projects(id) ON DELETE CASCADE,
-    title TEXT NOT NULL,
-    completed BOOLEAN NOT NULL DEFAULT false,
-    responsible_user_id UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
-ALTER TABLE public.projects ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.project_tasks ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY "Allow authenticated read on projects" ON public.projects FOR SELECT TO authenticated USING (true);
-CREATE POLICY "Allow authenticated insert on projects" ON public.projects FOR INSERT TO authenticated WITH CHECK (true);
-CREATE POLICY "Allow authenticated update on projects" ON public.projects FOR UPDATE TO authenticated USING (true);
-CREATE POLICY "Allow authenticated delete on projects" ON public.projects FOR DELETE TO authenticated USING (true);
-
-CREATE POLICY "Allow authenticated read on project_tasks" ON public.project_tasks FOR SELECT TO authenticated USING (true);
-CREATE POLICY "Allow authenticated insert on project_tasks" ON public.project_tasks FOR INSERT TO authenticated WITH CHECK (true);
-CREATE POLICY "Allow authenticated update on project_tasks" ON public.project_tasks FOR UPDATE TO authenticated USING (true);
-CREATE POLICY "Allow authenticated delete on project_tasks" ON public.project_tasks FOR DELETE TO authenticated USING (true);`}
-            </pre>
-
-            <div className="flex items-center justify-between pt-2">
-              <span className="text-[11px] text-white/40 font-mono">
-                Arquivo completo salvo em: /supabase_projects_schema.sql
-              </span>
-              <button
-                onClick={handleCopySql}
-                className="px-4 py-2 bg-[#C6FF00] hover:bg-[#b0e600] text-[#0A0A0A] font-mono font-bold text-xs flex items-center gap-2 transition-colors cursor-pointer"
-              >
-                {sqlCopied ? <Check className="w-4 h-4 stroke-[2.5]" /> : <Copy className="w-4 h-4" />}
-                <span>{sqlCopied ? 'COPIADO COM SUCESSO!' : 'COPIAR SCRIPT SQL'}</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// -------------------------------------------------------------
-// SUB-COMPONENTE: CARD DO PROJETO (KANBAN)
-// -------------------------------------------------------------
-interface ProjectCardItemProps {
-  project: ProjectItem;
-  onDragStart: (e: React.DragEvent) => void;
-  onSelect: () => void;
-  onToggleTask: (taskId: string, currentCompleted: boolean) => void;
-}
-
-function ProjectCardItem({
-  project,
-  onDragStart,
-  onSelect,
-  onToggleTask,
-}: ProjectCardItemProps) {
-  const priorityConf = PROJECT_PRIORITY_CONFIG[project.priority];
-
-  return (
-    <div
-      draggable
-      onDragStart={onDragStart}
-      onClick={onSelect}
-      className={`bg-[#161616] hover:bg-[#1C1C1C] border p-3 flex flex-col justify-between transition-all duration-150 cursor-grab active:cursor-grabbing group shadow-sm ${
-        project.is_delayed
-          ? 'border-rose-600/60 hover:border-rose-500'
-          : 'border-white/5 hover:border-white/20'
-      }`}
-    >
-      <div>
-        {/* Top Badges */}
-        <div className="flex items-center justify-between gap-1 mb-2">
-          {/* Priority */}
-          <span
-            className={`inline-flex items-center gap-1 px-1.5 py-0.5 text-[9px] font-mono font-bold ${priorityConf.badgeClass}`}
-          >
-            <span className={`w-1 h-1 rounded-full ${priorityConf.dotClass}`} />
-            {project.priority}
-          </span>
-
-          {/* Delayed Flag */}
-          {project.is_delayed ? (
-            <span className="px-1.5 py-0.5 bg-rose-950/90 text-rose-300 border border-rose-600/70 text-[9px] font-mono font-bold flex items-center gap-1 animate-pulse">
-              <AlertTriangle className="w-2.5 h-2.5 text-rose-400" />
-              ATRASADO
-            </span>
-          ) : (
-            <span className="text-[10px] font-mono text-white/40 flex items-center gap-1">
-              <Clock className="w-3 h-3 text-white/30" />
-              {project.deadline
-                ? new Date(project.deadline + 'T00:00:00').toLocaleDateString('pt-BR')
-                : 'Sem data'}
-            </span>
-          )}
-        </div>
-
-        {/* Project Title */}
-        <h3 className="font-mono text-xs font-bold text-white group-hover:text-[#C6FF00] transition-colors leading-tight mb-1.5">
-          {project.name}
-        </h3>
-
-        {/* Client & Service */}
-        <div className="space-y-1 mb-3 text-[11px] font-mono">
-          <div className="flex items-center gap-1.5 text-white/70 truncate">
-            <Building className="w-3 h-3 text-white/30 shrink-0" />
-            <span className="truncate">{project.client_name}</span>
-          </div>
-          <div className="flex items-center gap-1.5 text-[#C6FF00]/80 truncate">
-            <Layers className="w-3 h-3 text-[#C6FF00]/40 shrink-0" />
-            <span className="truncate">{project.service_name}</span>
-          </div>
-        </div>
-
-        {/* Tasks Progress Bar */}
-        <div className="space-y-1 mb-3">
-          <div className="flex justify-between text-[10px] font-mono text-white/50">
-            <span>
-              Etapas ({project.tasks_completed}/{project.tasks_total})
-            </span>
-            <span className="text-[#C6FF00] font-bold">{project.progress_percent}%</span>
-          </div>
-          <div className="h-1.5 w-full bg-[#111111] overflow-hidden border border-white/5">
-            <div
-              style={{ width: `${project.progress_percent}%` }}
-              className="h-full bg-[#C6FF00] transition-all duration-300"
-            />
-          </div>
-        </div>
-      </div>
-
-      {/* Card Footer */}
-      <div className="pt-2 border-t border-white/5 flex items-center justify-between text-[10px] font-mono text-white/50">
-        <span className="flex items-center gap-1 text-white/60 truncate max-w-[100px]">
-          <User className="w-3 h-3 text-white/30 shrink-0" />
-          <span className="truncate">{project.responsible_name}</span>
-        </span>
-        <span className="font-bold text-white font-mono">
-          {formatProjectCurrency(project.value)}
-        </span>
-      </div>
     </div>
   );
 }
@@ -1567,11 +1143,15 @@ function NewProjectModal({
                 className="w-full bg-[#161616] border border-white/10 px-3 py-2 text-white focus:outline-none focus:border-[#C6FF00] cursor-pointer"
               >
                 <option value="">-- Selecione --</option>
-                {profiles.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.full_name || p.email}
-                  </option>
-                ))}
+                <option value="felipe">Felipe</option>
+                <option value="pietro">Pietro</option>
+                {profiles
+                  .filter((p) => p.id !== 'felipe' && p.id !== 'pietro')
+                  .map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.full_name?.split(' ')[0] || p.full_name || p.email}
+                    </option>
+                  ))}
               </select>
             </div>
 
@@ -1596,7 +1176,7 @@ function NewProjectModal({
                 onChange={(e) => setStatus(e.target.value as ProjectStatus)}
                 className="w-full bg-[#161616] border border-white/10 px-3 py-2 text-white focus:outline-none focus:border-[#C6FF00] cursor-pointer"
               >
-                {KANBAN_STAGES.map((st) => (
+                {PROJECT_STAGES.map((st) => (
                   <option key={st} value={st}>
                     {st}
                   </option>

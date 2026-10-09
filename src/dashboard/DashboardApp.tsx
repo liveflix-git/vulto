@@ -26,18 +26,10 @@ import { DashboardSidebar } from './components/DashboardSidebar';
 import { DashboardLogin } from './components/DashboardLogin';
 import { OverviewView } from './components/OverviewView';
 import { FinanceViewReal } from './components/FinanceViewReal';
-import { FinanceView } from './components/FinanceView';
-import { PipelineView } from './components/PipelineView';
-import { CRMView } from './components/CRMView';
 import { ClientsViewReal } from './components/ClientsViewReal';
-import { ClientsView } from './components/ClientsView';
 import { ServicesPricingView } from './components/ServicesPricingView';
 import { ProjectsViewReal } from './components/ProjectsViewReal';
-import { ProjectsView } from './components/ProjectsView';
 import { VultoTapViewReal } from './components/VultoTapViewReal';
-import { VultoTapView } from './components/VultoTapView';
-import { GoalsViewReal } from './components/GoalsViewReal';
-import { GoalsView } from './components/GoalsView';
 import { ReportsView } from './components/ReportsView';
 import { NewRecordModal } from './components/NewRecordModal';
 
@@ -54,29 +46,31 @@ export function DashboardApp({
 }: DashboardAppProps) {
   const [state, setState] = useState<DashboardState>(() => loadDashboardState());
   const [currentTab, setCurrentTab] = useState<DashboardTab>(() => {
-    if (currentPath.includes('/crm')) return 'pipeline';
+    if (currentPath.includes('/crm') || currentPath.includes('/pipeline') || currentPath.includes('/financeiro')) return 'finance';
     if (currentPath.includes('/clientes')) return 'clients';
-    if (currentPath.includes('/financeiro')) return 'finance';
     if (currentPath.includes('/vulto-tap')) return 'vulto_tap';
-    if (currentPath.includes('/metas')) return 'goals';
     if (currentPath.includes('/projetos')) return 'projects';
+    if (currentPath.includes('/precos') || currentPath.includes('/servicos')) return 'pricing';
+    if (currentPath.includes('/relatorios')) return 'reports';
     return 'overview';
   });
 
   // Sync tab when currentPath changes externally
   useEffect(() => {
-    if (currentPath.includes('/crm')) {
-      setCurrentTab('pipeline');
+    if (currentPath.includes('/crm') || currentPath.includes('/pipeline') || currentPath.includes('/financeiro')) {
+      setCurrentTab('finance');
     } else if (currentPath.includes('/clientes')) {
       setCurrentTab('clients');
-    } else if (currentPath.includes('/financeiro')) {
-      setCurrentTab('finance');
     } else if (currentPath.includes('/vulto-tap')) {
       setCurrentTab('vulto_tap');
-    } else if (currentPath.includes('/metas')) {
-      setCurrentTab('goals');
     } else if (currentPath.includes('/projetos')) {
       setCurrentTab('projects');
+    } else if (currentPath.includes('/precos') || currentPath.includes('/servicos')) {
+      setCurrentTab('pricing');
+    } else if (currentPath.includes('/relatorios')) {
+      setCurrentTab('reports');
+    } else if (currentPath.includes('/metas')) {
+      setCurrentTab('overview');
     }
   }, [currentPath]);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -150,12 +144,13 @@ export function DashboardApp({
     setCurrentTab(tab);
     if (onNavigate) {
       if (tab === 'overview') onNavigate('/dashboard');
-      else if (tab === 'finance') onNavigate('/dashboard/financeiro');
-      else if (tab === 'pipeline') onNavigate('/dashboard/crm');
+      else if (tab === 'finance' || tab === 'pipeline' || tab === 'crm') onNavigate('/dashboard/financeiro');
       else if (tab === 'clients') onNavigate('/dashboard/clientes');
       else if (tab === 'vulto_tap') onNavigate('/dashboard/vulto-tap');
-      else if (tab === 'goals') onNavigate('/dashboard/metas');
+      else if (tab === 'goals') onNavigate('/dashboard');
       else if (tab === 'projects') onNavigate('/dashboard/projetos');
+      else if (tab === 'pricing') onNavigate('/dashboard/precos');
+      else if (tab === 'reports') onNavigate('/dashboard/relatorios');
     }
   };
 
@@ -308,15 +303,9 @@ export function DashboardApp({
           />
         );
       case 'finance':
-        return <FinanceViewReal />;
       case 'pipeline':
       case 'crm':
-        return (
-          <CRMView
-            onOpenNewRecord={() => setIsModalOpen(true)}
-            onNavigateClients={() => setCurrentTab('clients')}
-          />
-        );
+        return <FinanceViewReal />;
       case 'clients':
         return <ClientsViewReal />;
       case 'pricing':
@@ -325,10 +314,9 @@ export function DashboardApp({
         return <ProjectsViewReal />;
       case 'vulto_tap':
         return <VultoTapViewReal />;
-      case 'goals':
-        return <GoalsViewReal />;
       case 'reports':
         return <ReportsView state={state} />;
+      case 'goals':
       default:
         return (
           <OverviewView

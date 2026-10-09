@@ -1,9 +1,10 @@
 import React from 'react';
 import { motion } from 'motion/react';
 import { ArrowLeft, ArrowRight, ArrowUpRight } from 'lucide-react';
-import { SERVICES_DATA, ServiceItem } from '../data/siteData';
+import { ServiceItem } from '../data/siteData';
 import { NfcShowcaseSection } from '../components/NfcShowcaseSection';
 import { ContactSection } from '../components/ContactSection';
+import { useLanguage } from '../context/LanguageContext';
 
 interface ServiceDetailPageProps {
   service: ServiceItem;
@@ -11,21 +12,25 @@ interface ServiceDetailPageProps {
 }
 
 export const ServiceDetailPage: React.FC<ServiceDetailPageProps> = ({
-  service,
+  service: initialService,
   onNavigate,
 }) => {
-  const currentIndex = SERVICES_DATA.findIndex((s) => s.slug === service.slug);
+  const { dict, services } = useLanguage();
+  const page = dict.pages.serviceDetail;
+
+  const currentService = services.find((s) => s.slug === initialService.slug) || initialService;
+  const currentIndex = services.findIndex((s) => s.slug === currentService.slug);
   const prevService =
     currentIndex > 0
-      ? SERVICES_DATA[currentIndex - 1]
-      : SERVICES_DATA[SERVICES_DATA.length - 1];
+      ? services[currentIndex - 1]
+      : services[services.length - 1];
   const nextService =
-    currentIndex < SERVICES_DATA.length - 1
-      ? SERVICES_DATA[currentIndex + 1]
-      : SERVICES_DATA[0];
+    currentIndex < services.length - 1
+      ? services[currentIndex + 1]
+      : services[0];
 
   const mappedContactService =
-    service.dropdownLabel === 'Sites' ? 'Site' : service.dropdownLabel;
+    currentService.dropdownLabel === 'Sites' ? 'Site' : currentService.dropdownLabel;
 
   return (
     <div className="bg-[#0A0A0A]">
@@ -41,33 +46,33 @@ export const ServiceDetailPage: React.FC<ServiceDetailPageProps> = ({
               className="inline-flex items-center gap-2 font-mono-tabular text-xs uppercase tracking-[0.16em] text-[#F4F4F1]/65 hover:text-[#C6FF00] transition-colors"
             >
               <ArrowLeft className="w-3.5 h-3.5" />
-              <span>VOLTAR PARA SERVIÇOS</span>
+              <span>{page.backToServices}</span>
             </a>
 
             <div className="flex items-center gap-2 font-mono-tabular text-xs uppercase tracking-[0.18em] text-[#F4F4F1]/45">
               <span>VULTO LAB</span>
               <span className="text-[#C6FF00]">·</span>
-              <span>SERVIÇO {service.number}</span>
+              <span>SERVIÇO {currentService.number}</span>
             </div>
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 lg:gap-12 items-end">
             <div className="lg:col-span-8">
               <span className="font-mono-tabular text-4xl sm:text-5xl text-[#C6FF00] font-light block mb-4">
-                {service.number}
+                {currentService.number}
               </span>
               <motion.h1
-                key={service.slug}
+                key={currentService.slug}
                 initial={{ opacity: 0, y: 18 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.45 }}
                 className="font-display font-bold uppercase text-4xl sm:text-6xl lg:text-7xl leading-[0.95] tracking-[-0.04em] text-[#F4F4F1]"
               >
-                {service.title}
+                {currentService.title}
                 <span className="text-[#C6FF00]">.</span>
               </motion.h1>
 
-              {service.isNfcSpecial && (
+              {currentService.isNfcSpecial && (
                 <div className="mt-6 inline-flex flex-wrap items-center gap-3 font-mono-tabular text-xs uppercase tracking-[0.16em] text-[#C6FF00]">
                   <span>CARD</span>
                   <span>→</span>
@@ -80,14 +85,14 @@ export const ServiceDetailPage: React.FC<ServiceDetailPageProps> = ({
 
             <div className="lg:col-span-4 space-y-6">
               <p className="text-lg sm:text-xl text-[#F4F4F1] font-medium leading-snug">
-                {service.shortDescription}
+                {currentService.shortDescription}
               </p>
               <a
                 href="#contato"
                 data-cursor="cta"
                 className="inline-flex items-center gap-3 px-7 py-4 bg-[#C6FF00] text-[#0A0A0A] text-xs font-bold uppercase tracking-[0.08em] hover:bg-[#d4ff33] transition-colors whitespace-nowrap"
               >
-                <span>SOLICITAR PROPOSTA</span>
+                <span>{page.requestProposal}</span>
                 <ArrowUpRight className="w-4 h-4 stroke-[2.5]" />
               </a>
             </div>
@@ -102,30 +107,30 @@ export const ServiceDetailPage: React.FC<ServiceDetailPageProps> = ({
               <div className="flex items-center gap-3">
                 <span className="w-5 h-[1.5px] bg-[#C6FF00]" />
                 <span className="font-mono-tabular text-xs uppercase tracking-[0.2em] text-[#F4F4F1]/60">
-                  VISÃO ESTRATÉGICA
+                  {page.strategicVision}
                 </span>
               </div>
               <h2 className="font-display font-bold uppercase text-2xl sm:text-4xl tracking-[-0.03em] text-[#F4F4F1]">
-                COMO OPERAMOS {service.title} NA VULTO LAB.
+                {page.howWeOperatePrefix} {currentService.title} NA VULTO LAB.
               </h2>
               <p className="text-base sm:text-lg text-[#F4F4F1]/75 leading-relaxed">
-                {service.extendedDescription}
+                {currentService.extendedDescription}
               </p>
             </div>
 
             <div className="lg:col-span-6 border border-[#F4F4F1]/12 bg-[#1A1A1A]/30 p-7 sm:p-10">
               <h3 className="font-mono-tabular text-xs uppercase tracking-[0.18em] text-[#C6FF00] mb-6">
-                ITENS DE ESCOPO &amp; ESPECIALIDADES
+                {page.scopeItems}
               </h3>
               <ul className="divide-y divide-[#F4F4F1]/10">
-                {service.capabilities.map((cap, idx) => (
+                {currentService.capabilities.map((cap, idx) => (
                   <li
                     key={cap}
                     className="py-3.5 flex items-center justify-between text-sm sm:text-base text-[#F4F4F1]"
                   >
                     <span className="font-medium capitalize">{cap}</span>
                     <span className="font-mono-tabular text-xs text-[#F4F4F1]/40">
-                      {service.number}.0{idx + 1}
+                      {currentService.number}.0{idx + 1}
                     </span>
                   </li>
                 ))}
@@ -137,12 +142,12 @@ export const ServiceDetailPage: React.FC<ServiceDetailPageProps> = ({
             <div className="flex items-center gap-3 mb-8">
               <span className="w-5 h-[1.5px] bg-[#C6FF00]" />
               <span className="font-mono-tabular text-xs uppercase tracking-[0.2em] text-[#F4F4F1]/60">
-                PILARES DE ENTREGA
+                {page.deliverables}
               </span>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 border-t border-l border-[#F4F4F1]/12">
-              {service.deliverables.map((deliv, i) => (
+              {currentService.deliverables.map((deliv, i) => (
                 <div
                   key={deliv.title}
                   className="p-7 sm:p-9 border-r border-b border-[#F4F4F1]/12 bg-[#0A0A0A] hover:bg-[#1A1A1A]/35 transition-colors flex flex-col justify-between"
@@ -170,12 +175,12 @@ export const ServiceDetailPage: React.FC<ServiceDetailPageProps> = ({
             <div className="flex items-center gap-3 mb-10">
               <span className="w-5 h-[1.5px] bg-[#C6FF00]" />
               <span className="font-mono-tabular text-xs uppercase tracking-[0.2em] text-[#F4F4F1]/60">
-                FLUXO DE IMPLEMENTAÇÃO
+                {page.stepByStep}
               </span>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              {service.architectureSteps.map((stepItem) => (
+              {currentService.architectureSteps.map((stepItem) => (
                 <div
                   key={stepItem.step}
                   className="p-7 border border-[#F4F4F1]/12 bg-[#1A1A1A]/20 relative"
@@ -196,7 +201,7 @@ export const ServiceDetailPage: React.FC<ServiceDetailPageProps> = ({
         </div>
       </section>
 
-      {service.slug === 'nfc-card' && <NfcShowcaseSection onNavigate={onNavigate} />}
+      {currentService.slug === 'nfc-card' && <NfcShowcaseSection onNavigate={onNavigate} />}
 
       <section
         aria-label="Navegar entre outros serviços"
@@ -213,7 +218,7 @@ export const ServiceDetailPage: React.FC<ServiceDetailPageProps> = ({
           >
             <div>
               <span className="font-mono-tabular text-[11px] uppercase tracking-widest text-[#F4F4F1]/45 block mb-1">
-                ← SERVIÇO ANTERIOR
+                ← {prevService.title}
               </span>
               <span className="font-display font-bold uppercase text-lg sm:text-xl text-[#F4F4F1] group-hover:text-[#C6FF00] transition-colors">
                 {prevService.number} · {prevService.title}
@@ -231,7 +236,7 @@ export const ServiceDetailPage: React.FC<ServiceDetailPageProps> = ({
           >
             <div className="ml-auto">
               <span className="font-mono-tabular text-[11px] uppercase tracking-widest text-[#F4F4F1]/45 block mb-1">
-                PRÓXIMO SERVIÇO →
+                {nextService.title} →
               </span>
               <span className="font-display font-bold uppercase text-lg sm:text-xl text-[#F4F4F1] group-hover:text-[#C6FF00] transition-colors">
                 {nextService.number} · {nextService.title}

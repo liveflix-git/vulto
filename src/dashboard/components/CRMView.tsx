@@ -132,8 +132,8 @@ export function CRMView({ onNavigateClients }: CRMViewProps) {
       map.set(p.id, p.full_name);
       if (p.email) map.set(p.email, p.full_name);
     });
-    map.set('felipe', 'Felipe Ramos');
-    map.set('pietro', 'Pietro Fontana');
+    map.set('felipe', 'Felipe');
+    map.set('pietro', 'Pietro');
     return map;
   }, [profiles]);
 

@@ -6,9 +6,13 @@ import { BrandLogo } from './BrandLogo';
 
 interface NfcShowcaseSectionProps {
   onNavigate: (path: string) => void;
+  showSpecsButton?: boolean;
 }
 
-export const NfcShowcaseSection: React.FC<NfcShowcaseSectionProps> = ({ onNavigate }) => {
+export const NfcShowcaseSection: React.FC<NfcShowcaseSectionProps> = ({
+  onNavigate,
+  showSpecsButton = true,
+}) => {
   const [selectedFeature, setSelectedFeature] = useState(NFC_FEATURES[0]);
 
   return (
@@ -128,17 +132,19 @@ export const NfcShowcaseSection: React.FC<NfcShowcaseSectionProps> = ({ onNaviga
                 </span>
               </a>
 
-              <a
-                href="/servicos/nfc-card"
-                onClick={(e) => {
-                  e.preventDefault();
-                  onNavigate('/servicos/nfc-card');
-                }}
-                className="inline-flex items-center justify-center gap-2 px-6 py-4 border border-[#0A0A0A]/20 text-[#0A0A0A] text-xs font-mono-tabular uppercase tracking-[0.12em] hover:border-[#0A0A0A] transition-colors whitespace-nowrap"
-              >
-                <span>ESPECIFICAÇÕES DO CARTÃO</span>
-                <ArrowUpRight className="w-3.5 h-3.5" />
-              </a>
+              {showSpecsButton && (
+                <a
+                  href="/servicos/nfc-card"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    onNavigate('/servicos/nfc-card');
+                  }}
+                  className="inline-flex items-center justify-center gap-2 px-6 py-4 border border-[#0A0A0A]/20 text-[#0A0A0A] text-xs font-mono-tabular uppercase tracking-[0.12em] hover:border-[#0A0A0A] transition-colors whitespace-nowrap"
+                >
+                  <span>ESPECIFICAÇÕES DO CARTÃO</span>
+                  <ArrowUpRight className="w-3.5 h-3.5" />
+                </a>
+              )}
             </div>
           </div>
 

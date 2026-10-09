@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion } from 'motion/react';
-import { CORE_PILLARS } from '../data/siteData';
+import { useLanguage } from '../context/LanguageContext';
 
 const MARQUEE_ITEMS = [
   'PAID MEDIA',
@@ -12,6 +12,9 @@ const MARQUEE_ITEMS = [
 ];
 
 export const WhatWeDoSection: React.FC = () => {
+  const { dict, pillars } = useLanguage();
+  const wwd = dict.whatWeDo;
+
   return (
     <section
       aria-labelledby="what-we-do-heading"
@@ -43,7 +46,7 @@ export const WhatWeDoSection: React.FC = () => {
             <div className="flex items-center gap-3 mb-5">
               <span className="w-5 h-[1.5px] bg-[#C6FF00]" />
               <span className="font-mono-tabular text-xs uppercase tracking-[0.2em] text-[#F4F4F1]/60">
-                POSICIONAMENTO &amp; TESE
+                {wwd.kicker}
               </span>
             </div>
 
@@ -55,9 +58,9 @@ export const WhatWeDoSection: React.FC = () => {
               transition={{ duration: 0.45 }}
               className="font-display font-bold uppercase text-3xl sm:text-5xl lg:text-6xl leading-[0.98] tracking-[-0.035em] text-[#F4F4F1]"
             >
-              NÃO FAZEMOS MARKETING
+              {wwd.headingLine1}
               <br />
-              <span className="text-[#F4F4F1]/85">POR FAZER</span>
+              <span className="text-[#F4F4F1]/85">{wwd.headingLine2}</span>
               <span className="text-[#C6FF00]">.</span>
             </motion.h2>
           </div>
@@ -70,14 +73,13 @@ export const WhatWeDoSection: React.FC = () => {
             className="lg:col-span-5"
           >
             <p className="text-base sm:text-lg text-[#F4F4F1]/75 leading-relaxed">
-              Construímos estruturas digitais pensadas para transformar atenção em oportunidade e
-              oportunidade em venda.
+              {wwd.support}
             </p>
           </motion.div>
         </div>
 
         <div className="divide-y divide-[#F4F4F1]/12">
-          {CORE_PILLARS.map((pillar, idx) => (
+          {pillars.map((pillar, idx) => (
             <motion.article
               key={pillar.title}
               initial={{ opacity: 0, y: 16 }}

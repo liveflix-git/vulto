@@ -1,13 +1,17 @@
 import React from 'react';
 import { motion } from 'motion/react';
-import { ArrowUpRight, CheckCircle2, ArrowRight } from 'lucide-react';
+import { ArrowUpRight } from 'lucide-react';
 import { ContactSection } from '../components/ContactSection';
+import { useLanguage } from '../context/LanguageContext';
 
 interface PageProps {
   onNavigate: (path: string) => void;
 }
 
 export const PaidMediaPage: React.FC<PageProps> = ({ onNavigate }) => {
+  const { dict } = useLanguage();
+  const page = dict.pages.paidMedia;
+
   return (
     <div className="bg-[#0A0A0A] text-[#F4F4F1]">
       {/* Hero da Página */}
@@ -16,7 +20,7 @@ export const PaidMediaPage: React.FC<PageProps> = ({ onNavigate }) => {
           <div className="flex items-center gap-3 mb-6">
             <span className="w-6 h-[1.5px] bg-[#C6FF00]" />
             <span className="font-mono-tabular text-xs uppercase tracking-[0.2em] text-[#C6FF00] font-semibold">
-              PAID MEDIA
+              {page.kicker}
             </span>
           </div>
 
@@ -28,9 +32,9 @@ export const PaidMediaPage: React.FC<PageProps> = ({ onNavigate }) => {
                 transition={{ duration: 0.45 }}
                 className="font-display font-bold uppercase text-4xl sm:text-6xl lg:text-7xl leading-[0.95] tracking-[-0.04em] text-[#F4F4F1]"
               >
-                TRÁFEGO É DISTRIBUIÇÃO.
+                {page.heroTitle1}
                 <br />
-                PERFORMANCE É ESTRATÉGIA<span className="text-[#C6FF00]">.</span>
+                {page.heroTitle2}<span className="text-[#C6FF00]">.</span>
               </motion.h1>
 
               <motion.p
@@ -39,7 +43,7 @@ export const PaidMediaPage: React.FC<PageProps> = ({ onNavigate }) => {
                 transition={{ duration: 0.45, delay: 0.1 }}
                 className="mt-6 text-lg sm:text-xl text-[#F4F4F1]/85 max-w-2xl leading-relaxed"
               >
-                Criamos e otimizamos campanhas para transformar investimento em oportunidades reais de negócio.
+                {page.heroSubtitle}
               </motion.p>
             </div>
 
@@ -53,7 +57,7 @@ export const PaidMediaPage: React.FC<PageProps> = ({ onNavigate }) => {
                 data-cursor="cta"
                 className="inline-flex items-center justify-center gap-3 px-8 py-4 bg-[#C6FF00] text-[#0A0A0A] text-xs font-bold uppercase tracking-[0.08em] hover:bg-[#d4ff33] transition-colors whitespace-nowrap"
               >
-                <span>QUERO ESTRUTURAR MINHAS CAMPANHAS</span>
+                <span>{page.heroCta}</span>
                 <ArrowUpRight className="w-4 h-4 stroke-[2.5]" />
               </a>
             </div>
@@ -67,57 +71,32 @@ export const PaidMediaPage: React.FC<PageProps> = ({ onNavigate }) => {
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-start">
             <div className="lg:col-span-5">
               <span className="font-mono-tabular text-xs uppercase tracking-[0.2em] text-[#F4F4F1]/45 block mb-4">
-                VISÃO DE MÍDIA PAGA
+                {page.visionKicker}
               </span>
               <h2 className="font-display font-bold uppercase text-3xl sm:text-4xl tracking-[-0.03em] text-[#F4F4F1]">
-                NÃO PARAMOS NO CLIQUE<span className="text-[#C6FF00]">.</span>
+                {page.visionTitle}<span className="text-[#C6FF00]">.</span>
               </h2>
             </div>
 
             <div className="lg:col-span-7 space-y-6 text-base sm:text-lg text-[#F4F4F1]/80 leading-relaxed">
               <p className="text-[#F4F4F1] font-semibold">
-                Paid Media é uma das principais frentes da VULTO LAB.
+                {page.p1}
               </p>
               <p>
-                Planejamos, estruturamos e otimizamos campanhas em plataformas como Meta Ads e Google Ads para empresas de diferentes segmentos.
+                {page.p2}
               </p>
               <p>
-                Nosso trabalho não termina no clique. Analisamos oferta, copy, criativo, página, rastreamento e jornada do usuário para identificar o que realmente influencia o resultado.
+                {page.p3}
               </p>
               <p className="border-l-2 border-[#C6FF00] pl-4 text-[#F4F4F1] font-semibold">
-                A mídia paga funciona melhor quando todo o sistema está preparado para converter.
+                {page.quote}
               </p>
             </div>
           </div>
 
           {/* Blocos de Capacidades */}
           <div className="mt-20 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 border-t border-l border-[#F4F4F1]/12">
-            {[
-              {
-                title: 'ESTRATÉGIA DE MÍDIA',
-                desc: 'Planejamento de campanhas baseado no estágio e objetivo da empresa.',
-              },
-              {
-                title: 'META ADS',
-                desc: 'Aquisição, remarketing, geração de leads e campanhas orientadas a resultado.',
-              },
-              {
-                title: 'GOOGLE ADS',
-                desc: 'Pesquisa, intenção de compra, remarketing e presença em momentos de alta demanda.',
-              },
-              {
-                title: 'TRACKING',
-                desc: 'Pixels, eventos, analytics e acompanhamento de conversões.',
-              },
-              {
-                title: 'OTIMIZAÇÃO',
-                desc: 'Análise constante de campanhas, públicos, criativos e custos.',
-              },
-              {
-                title: 'LEAD GENERATION',
-                desc: 'Foco em oportunidades comerciais reais e não apenas métricas de vaidade.',
-              },
-            ].map((block, idx) => (
+            {page.capabilities.map((block, idx) => (
               <div
                 key={block.title}
                 className="p-8 border-r border-b border-[#F4F4F1]/12 bg-[#0A0A0A] hover:bg-[#1A1A1A]/40 transition-colors"

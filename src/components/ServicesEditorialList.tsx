@@ -1,7 +1,7 @@
 import React from 'react';
 import { motion } from 'motion/react';
 import { ArrowRight, ArrowUpRight } from 'lucide-react';
-import { SERVICES_DATA } from '../data/siteData';
+import { useLanguage } from '../context/LanguageContext';
 
 interface ServicesEditorialListProps {
   onNavigate: (path: string) => void;
@@ -12,6 +12,9 @@ export const ServicesEditorialList: React.FC<ServicesEditorialListProps> = ({
   onNavigate,
   showHeader = true,
 }) => {
+  const { dict, services } = useLanguage();
+  const sList = dict.servicesList;
+
   const handleServiceClick = (e: React.MouseEvent, slug: string) => {
     e.preventDefault();
     onNavigate(`/${slug}`);
@@ -29,14 +32,14 @@ export const ServicesEditorialList: React.FC<ServicesEditorialListProps> = ({
               <div className="flex items-center gap-3 mb-4">
                 <span className="w-5 h-[1.5px] bg-[#C6FF00]" />
                 <span className="font-mono-tabular text-xs uppercase tracking-[0.2em] text-[#F4F4F1]/60">
-                  CAPACIDADES &amp; ESCOPO
+                  {sList.kicker}
                 </span>
               </div>
               <h2
                 id="services-editorial-heading"
                 className="font-display font-bold uppercase text-3xl sm:text-5xl tracking-[-0.035em] text-[#F4F4F1]"
               >
-                SERVIÇOS<span className="text-[#C6FF00]">.</span>
+                {sList.heading}<span className="text-[#C6FF00]">.</span>
               </h2>
             </div>
 
@@ -48,14 +51,14 @@ export const ServicesEditorialList: React.FC<ServicesEditorialListProps> = ({
               }}
               className="inline-flex items-center gap-2 text-xs font-mono-tabular uppercase tracking-[0.14em] text-[#F4F4F1]/75 hover:text-[#C6FF00] transition-colors self-start md:self-auto whitespace-nowrap"
             >
-              <span>VER ARQUITETURA COMPLETA DE SERVIÇOS</span>
+              <span>{sList.seeFullArchitecture}</span>
               <ArrowUpRight className="w-4 h-4" />
             </a>
           </div>
         )}
 
         <div className="divide-y divide-[#F4F4F1]/12 border-b border-[#F4F4F1]/12">
-          {SERVICES_DATA.map((service, index) => (
+          {services.map((service, index) => (
             <motion.div
               key={service.id}
               initial={{ opacity: 0, y: 16 }}
@@ -88,11 +91,11 @@ export const ServicesEditorialList: React.FC<ServicesEditorialListProps> = ({
 
                     {service.isNfcSpecial && (
                       <div className="mt-3 inline-flex flex-wrap items-center gap-2 font-mono-tabular text-[11px] tracking-[0.14em] uppercase text-[#C6FF00]">
-                        <span>CARD</span>
+                        <span>{dict.nfcSection.badge1}</span>
                         <span aria-hidden="true">→</span>
-                        <span>APROXIMAÇÃO</span>
+                        <span>{dict.nfcSection.badge2}</span>
                         <span aria-hidden="true">→</span>
-                        <span>PERFIL DIGITAL</span>
+                        <span>{dict.nfcSection.badge3}</span>
                       </div>
                     )}
                   </div>
@@ -117,7 +120,7 @@ export const ServicesEditorialList: React.FC<ServicesEditorialListProps> = ({
 
                   <div className="lg:col-span-2 flex lg:justify-end pt-2 lg:pt-0">
                     <span className="inline-flex items-center gap-2 font-mono-tabular text-xs uppercase tracking-[0.12em] text-[#F4F4F1]/70 group-hover:text-[#C6FF00] transition-colors whitespace-nowrap">
-                      <span>VER SERVIÇO</span>
+                      <span>{sList.exploreService} {service.title}</span>
                       <ArrowRight className="w-4 h-4 text-[#C6FF00] transition-transform duration-200 group-hover:translate-x-1.5" />
                     </span>
                   </div>

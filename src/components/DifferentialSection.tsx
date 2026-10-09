@@ -1,13 +1,37 @@
 import React from 'react';
 import { motion } from 'motion/react';
 import { ArrowUpRight } from 'lucide-react';
-import { FUTURE_CASES_REPOSITORY } from '../data/siteData';
+import { useLanguage } from '../context/LanguageContext';
 
 interface DifferentialSectionProps {
   onNavigate: (path: string) => void;
 }
 
 export const DifferentialSection: React.FC<DifferentialSectionProps> = ({ onNavigate }) => {
+  const { dict, language } = useLanguage();
+  const diff = dict.differential;
+
+  const isPt = language === 'pt-PT';
+
+  const localizedCases = [
+    {
+      id: 'case-01',
+      sector: isPt ? 'AUTOMÓVEL & PERFORMANCE' : 'AUTOMOTIVO & PERFORMANCE',
+      client: isPt ? 'CONCESSIONÁRIO & PAID MEDIA' : 'CONCESSIONÁRIA & MÍDIA PAGA',
+      summary: isPt
+        ? 'Estrutura completa de recolha de leads qualificados e acompanhamento de funil no sector automóvel.'
+        : 'Estrutura completa de geração de leads qualificados e acompanhamento de funil no setor automotivo.',
+    },
+    {
+      id: 'case-02',
+      sector: isPt ? 'CRIADORES & AUDIÊNCIAS MASSIVAS' : 'CRIADORES & AUDIÊNCIAS MASSIVAS',
+      client: isPt ? '+35M DE SUBSCRITORES' : '+35M DE INSCRITOS',
+      summary: isPt
+        ? 'Posicionamento de marca, copywriting e VULTO TAP para eventos presenciais e lançamentos.'
+        : 'Posicionamento de marca, copywriting e VULTO TAP para eventos presenciais e lançamentos.',
+    },
+  ];
+
   return (
     <section
       aria-labelledby="differential-heading"
@@ -24,7 +48,7 @@ export const DifferentialSection: React.FC<DifferentialSectionProps> = ({ onNavi
             <div className="flex items-center gap-3 mb-6">
               <span className="w-5 h-[1.5px] bg-[#C6FF00]" />
               <span className="font-mono-tabular text-xs uppercase tracking-[0.2em] text-[#F4F4F1]/60">
-                DIRETRIZ DE PERFORMANCE
+                {diff.kicker}
               </span>
             </div>
 
@@ -36,13 +60,13 @@ export const DifferentialSection: React.FC<DifferentialSectionProps> = ({ onNavi
               transition={{ duration: 0.5 }}
               className="font-display font-bold uppercase text-3xl sm:text-5xl md:text-6xl lg:text-[4.25rem] leading-[0.98] tracking-[-0.04em] text-[#F4F4F1]"
             >
-              <span className="block text-[#F4F4F1]/55">MENOS MARKETING</span>
-              <span className="block text-[#F4F4F1]/55 mb-5 sm:mb-7">DE ENFEITE.</span>
-              <span className="block text-[#F4F4F1]">MAIS ESTRUTURA</span>
+              <span className="block text-[#F4F4F1]/55">{diff.headingLine1}</span>
+              <span className="block text-[#F4F4F1]/55 mb-5 sm:mb-7">{diff.headingLine2}</span>
+              <span className="block text-[#F4F4F1]">{diff.headingLine3}</span>
               <span className="inline-block relative">
-                PARA{' '}
+                {diff.headingLine4}{' '}
                 <span className="text-[#C6FF00] relative inline-block">
-                  CRESCER.
+                  {diff.headingHighlight}
                   <span className="block h-[2px] w-full bg-[#C6FF00] mt-1" />
                 </span>
               </span>
@@ -57,8 +81,7 @@ export const DifferentialSection: React.FC<DifferentialSectionProps> = ({ onNavi
             className="lg:col-span-4 space-y-6 border-l border-[#F4F4F1]/15 pl-6"
           >
             <p className="text-sm sm:text-base text-[#F4F4F1]/75 leading-relaxed">
-              Métricas de vaidade não pagam operação. Substituímos ações soltas por um sistema onde
-              mídia paga, copy e interface web operam sob a mesma lógica comercial.
+              {diff.support}
             </p>
             <a
               href="/contato"
@@ -69,7 +92,7 @@ export const DifferentialSection: React.FC<DifferentialSectionProps> = ({ onNavi
               data-cursor="cta"
               className="inline-flex items-center gap-2 font-mono-tabular text-xs uppercase tracking-[0.14em] text-[#C6FF00] hover:underline underline-offset-4"
             >
-              <span>ESTRUTURAR MEU PROJETO</span>
+              <span>{diff.cta}</span>
               <ArrowUpRight className="w-4 h-4" />
             </a>
           </motion.div>
@@ -78,55 +101,45 @@ export const DifferentialSection: React.FC<DifferentialSectionProps> = ({ onNavi
         <div className="mt-16 sm:mt-20 grid grid-cols-1 md:grid-cols-2 border border-[#F4F4F1]/12 divide-y md:divide-y-0 md:divide-x divide-[#F4F4F1]/12">
           <div className="p-7 sm:p-10 bg-[#0A0A0A]">
             <span className="font-mono-tabular text-xs uppercase tracking-[0.18em] text-[#F4F4F1]/40 block mb-6">
-              ABORDAGEM CONVENCIONAL
+              {diff.conventionalTitle}
             </span>
             <ul className="space-y-4 text-sm sm:text-base text-[#F4F4F1]/55">
-              <li className="flex items-start gap-3">
-                <span className="font-mono-tabular text-xs text-[#F4F4F1]/35 mt-1">—</span>
-                <span>Campanhas isoladas sem página de destino preparada para converter</span>
-              </li>
-              <li className="flex items-start gap-3">
-                <span className="font-mono-tabular text-xs text-[#F4F4F1]/35 mt-1">—</span>
-                <span>Templates genéricos, lentos e com mensagem igual à do concorrente</span>
-              </li>
-              <li className="flex items-start gap-3">
-                <span className="font-mono-tabular text-xs text-[#F4F4F1]/35 mt-1">—</span>
-                <span>Foco em curtidas, alcance superficial e relatórios sem clareza comercial</span>
-              </li>
+              {diff.conventionalItems.map((item) => (
+                <li key={item} className="flex items-start gap-3">
+                  <span className="font-mono-tabular text-xs text-[#F4F4F1]/35 mt-1">—</span>
+                  <span>{item}</span>
+                </li>
+              ))}
             </ul>
           </div>
 
           <div className="p-7 sm:p-10 bg-[#1A1A1A]/45">
             <div className="flex items-center justify-between mb-6">
               <span className="font-mono-tabular text-xs uppercase tracking-[0.18em] text-[#C6FF00]">
-                ESTRUTURA VULTO LAB
+                {diff.vultoTitle}
               </span>
               <span className="w-2 h-2 bg-[#C6FF00]" />
             </div>
             <ul className="space-y-4 text-sm sm:text-base text-[#F4F4F1]/90">
-              <li className="flex items-start gap-3">
-                <span className="font-mono-tabular text-xs text-[#C6FF00] mt-1">01</span>
-                <span>Aquisição paga alinhada à arquitetura de página e rastreamento preciso</span>
-              </li>
-              <li className="flex items-start gap-3">
-                <span className="font-mono-tabular text-xs text-[#C6FF00] mt-1">02</span>
-                <span>Design editorial autoral somado a copywriting construído para decisão</span>
-              </li>
-              <li className="flex items-start gap-3">
-                <span className="font-mono-tabular text-xs text-[#C6FF00] mt-1">03</span>
-                <span>Presença física e digital conectada (Web, Funis e Tecnologia NFC)</span>
-              </li>
+              {diff.vultoItems.map((item, i) => (
+                <li key={item} className="flex items-start gap-3">
+                  <span className="font-mono-tabular text-xs text-[#C6FF00] mt-1">
+                    0{i + 1}
+                  </span>
+                  <span>{item}</span>
+                </li>
+              ))}
             </ul>
           </div>
         </div>
 
-        {FUTURE_CASES_REPOSITORY.length > 0 && (
+        {localizedCases.length > 0 && (
           <div className="mt-16 pt-16 border-t border-[#F4F4F1]/12">
             <h3 className="font-display font-bold uppercase text-2xl text-[#F4F4F1] mb-8">
-              PROJETOS SELECIONADOS
+              {isPt ? 'PROJECTOS SELECCIONADOS' : 'PROJETOS SELECIONADOS'}
             </h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-              {FUTURE_CASES_REPOSITORY.map((caseItem) => (
+              {localizedCases.map((caseItem) => (
                 <div
                   key={caseItem.id}
                   className="p-8 border border-[#F4F4F1]/15 bg-[#1A1A1A]/30"

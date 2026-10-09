@@ -679,7 +679,7 @@ function getFallbackProjects(): ProjectItem[] {
       description:
         'Desenvolvimento completo da nova plataforma institucional com integração Supabase e checkout Pix/Cartão.',
       responsible_user_id: null,
-      responsible_name: 'Pietro R.',
+      responsible_name: 'Pietro',
       status: 'EM ANDAMENTO',
       priority: 'Alta',
       start_date: '2026-09-25',
@@ -736,7 +736,7 @@ function getFallbackProjects(): ProjectItem[] {
       description:
         'Estruturação dos conjuntos de anúncios CBO, testes de criativos em vídeo e tracking CAPI com Pixel.',
       responsible_user_id: null,
-      responsible_name: 'Felipe M.',
+      responsible_name: 'Felipe',
       status: 'A FAZER',
       priority: 'Normal',
       start_date: '2026-10-06',
@@ -777,7 +777,7 @@ function getFallbackProjects(): ProjectItem[] {
       description:
         'Confecção de cartões metálicos com corte a laser personalizado e codificação de chip NTAG213.',
       responsible_user_id: null,
-      responsible_name: 'Pietro R.',
+      responsible_name: 'Pietro',
       status: 'REVISÃO',
       priority: 'Normal',
       start_date: '2026-09-30',
@@ -834,7 +834,7 @@ function getFallbackProjects(): ProjectItem[] {
       description:
         'Integração da Evolution API com modelo Gemini Flash para qualificação e roteamento 24/7 de leads.',
       responsible_user_id: null,
-      responsible_name: 'Felipe M.',
+      responsible_name: 'Felipe',
       status: 'EM ANDAMENTO',
       priority: 'Urgente',
       start_date: '2026-09-15',
@@ -883,7 +883,7 @@ function getFallbackProjects(): ProjectItem[] {
       description:
         'Refatoração do copy de vendas, prova social interativa e redução de fricção no checkout.',
       responsible_user_id: null,
-      responsible_name: 'Felipe M.',
+      responsible_name: 'Felipe',
       status: 'CONCLUÍDO',
       priority: 'Normal',
       start_date: '2026-09-10',

@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
 import { motion } from 'motion/react';
-import { PROCESS_STEPS } from '../data/siteData';
+import { useLanguage } from '../context/LanguageContext';
 
 export const ProcessSection: React.FC = () => {
   const [activeIndex, setActiveIndex] = useState<number>(0);
+  const { dict, processSteps } = useLanguage();
+  const proc = dict.process;
 
   return (
     <section
@@ -16,19 +18,19 @@ export const ProcessSection: React.FC = () => {
             <div className="flex items-center gap-3 mb-4">
               <span className="w-5 h-[1.5px] bg-[#C6FF00]" />
               <span className="font-mono-tabular text-xs uppercase tracking-[0.2em] text-[#F4F4F1]/60">
-                METODOLOGIA &amp; OPERAÇÃO
+                {proc.kicker}
               </span>
             </div>
             <h2
               id="process-heading"
               className="font-display font-bold uppercase text-3xl sm:text-5xl tracking-[-0.035em] text-[#F4F4F1]"
             >
-              COMO TRABALHAMOS<span className="text-[#C6FF00]">.</span>
+              {proc.heading}<span className="text-[#C6FF00]">.</span>
             </h2>
           </div>
 
           <p className="font-mono-tabular text-xs uppercase tracking-[0.14em] text-[#F4F4F1]/50">
-            01 DIAGNÓSTICO → 04 OTIMIZAÇÃO CONTÍNUA
+            {proc.counterLabel}
           </p>
         </div>
 
@@ -39,12 +41,12 @@ export const ProcessSection: React.FC = () => {
           >
             <div
               className="h-full bg-[#C6FF00] transition-all duration-300 ease-out"
-              style={{ width: `${((activeIndex + 1) / PROCESS_STEPS.length) * 100}%` }}
+              style={{ width: `${((activeIndex + 1) / processSteps.length) * 100}%` }}
             />
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-4 gap-0 lg:gap-8 relative">
-            {PROCESS_STEPS.map((step, index) => {
+            {processSteps.map((step, index) => {
               const isActive = index <= activeIndex;
               const isCurrent = index === activeIndex;
 
@@ -59,7 +61,7 @@ export const ProcessSection: React.FC = () => {
                   onClick={() => setActiveIndex(index)}
                   className="relative pl-8 lg:pl-0 pb-12 lg:pb-0 last:pb-0 group cursor-pointer"
                 >
-                  {index < PROCESS_STEPS.length - 1 && (
+                  {index < processSteps.length - 1 && (
                     <div
                       aria-hidden="true"
                       className={`lg:hidden absolute left-[11px] top-6 bottom-0 w-[1px] transition-colors duration-200 ${
@@ -84,7 +86,7 @@ export const ProcessSection: React.FC = () => {
                     </div>
 
                     <span className="lg:hidden font-mono-tabular text-xs text-[#C6FF00]">
-                      ETAPA {step.number}
+                      {proc.stepPrefix} {step.number}
                     </span>
                   </div>
 

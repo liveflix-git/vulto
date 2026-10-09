@@ -2,12 +2,10 @@ import React from 'react';
 import {
   LayoutDashboard,
   Wallet,
-  Target,
   Users,
   Layers,
-  Kanban,
+  FolderGit2,
   CreditCard,
-  TrendingUp,
   FileText,
   MessageCircle,
   ExternalLink,
@@ -52,16 +50,9 @@ export function DashboardSidebar({
     {
       id: 'finance',
       label: 'Financeiro',
-      sublabel: 'Caixa & DRE',
+      sublabel: 'Caixa, Vendas & Propostas',
       icon: Wallet,
       badge: counts.pendingTransactions > 0 ? counts.pendingTransactions : undefined,
-    },
-    {
-      id: 'pipeline',
-      label: 'CRM & Pipeline',
-      sublabel: 'Funil Comercial',
-      icon: Target,
-      badge: counts.activeDeals,
     },
     {
       id: 'clients',
@@ -71,29 +62,23 @@ export function DashboardSidebar({
       badge: counts.activeClients,
     },
     {
+      id: 'projects',
+      label: 'Projetos & Entregas',
+      sublabel: 'Operação & Demandas',
+      icon: FolderGit2,
+      badge: counts.activeProjects,
+    },
+    {
       id: 'pricing',
       label: 'Serviços & Preços',
       sublabel: 'Tabela & Simulador',
       icon: Layers,
     },
     {
-      id: 'projects',
-      label: 'Projetos & Entregas',
-      sublabel: 'Operação & Sprints',
-      icon: Kanban,
-      badge: counts.activeProjects,
-    },
-    {
       id: 'vulto_tap',
       label: 'VULTO TAP (NFC)',
       sublabel: 'Estoque & Lotes Físicos',
       icon: CreditCard,
-    },
-    {
-      id: 'goals',
-      label: 'Metas & Indicadores',
-      sublabel: 'Objetivos Q4',
-      icon: TrendingUp,
     },
     {
       id: 'reports',

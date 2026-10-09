@@ -1,8 +1,8 @@
 import React from 'react';
 import { motion } from 'motion/react';
 import { ArrowUpRight } from 'lucide-react';
-import { ABOUT_CONCEPTS } from '../data/siteData';
 import { VultoArchitecturalMonogram } from './BrandLogo';
+import { useLanguage } from '../context/LanguageContext';
 
 interface AboutSectionProps {
   onNavigate?: (path: string) => void;
@@ -13,6 +13,9 @@ export const AboutSection: React.FC<AboutSectionProps> = ({
   onNavigate,
   showMoreLink = true,
 }) => {
+  const { dict, concepts } = useLanguage();
+  const ab = dict.aboutSection;
+
   return (
     <section
       aria-labelledby="about-vulto-heading"
@@ -24,7 +27,7 @@ export const AboutSection: React.FC<AboutSectionProps> = ({
             <div className="flex items-center gap-3">
               <span className="w-5 h-[1.5px] bg-[#C6FF00]" />
               <span className="font-mono-tabular text-xs uppercase tracking-[0.22em] text-[#C6FF00]">
-                VULTO LAB
+                {ab.kicker}
               </span>
             </div>
 
@@ -36,9 +39,9 @@ export const AboutSection: React.FC<AboutSectionProps> = ({
               transition={{ duration: 0.45 }}
               className="font-display font-bold uppercase text-3xl sm:text-5xl lg:text-6xl leading-[0.98] tracking-[-0.035em] text-[#F4F4F1]"
             >
-              ESTRATÉGIA ANTES
+              {ab.headingLine1}
               <br />
-              DE EXECUÇÃO<span className="text-[#C6FF00]">.</span>
+              {ab.headingLine2}<span className="text-[#C6FF00]">.</span>
             </motion.h2>
 
             <div className="pt-4 hidden lg:flex items-center gap-6 border-t border-[#F4F4F1]/10">
@@ -49,11 +52,10 @@ export const AboutSection: React.FC<AboutSectionProps> = ({
               />
               <div className="space-y-1.5">
                 <p className="font-mono-tabular text-xs uppercase tracking-[0.16em] text-[#F4F4F1]/75">
-                  LABORATÓRIO DE ESTRUTURA DIGITAL
+                  {ab.monogramTitle}
                 </p>
                 <p className="text-xs text-[#F4F4F1]/50 max-w-xs leading-relaxed">
-                  Projetos desenhados sob medida na interseção entre aquisição, mensagem e
-                  engenharia web.
+                  {ab.monogramSubtitle}
                 </p>
               </div>
             </div>
@@ -68,17 +70,16 @@ export const AboutSection: React.FC<AboutSectionProps> = ({
           >
             <div className="space-y-5 text-base sm:text-lg text-[#F4F4F1]/80 leading-relaxed">
               <p className="text-[#F4F4F1] font-medium text-lg sm:text-xl">
-                A Vulto Lab nasce da interseção entre estratégia, comunicação e tecnologia.
+                {ab.p1}
               </p>
               <p>
-                Criamos estruturas digitais pensadas para atrair atenção, construir percepção e
-                transformar interesse em oportunidade.
+                {ab.p2}
               </p>
               <p className="border-l-2 border-[#C6FF00] pl-4 text-[#F4F4F1] font-medium">
-                Não vendemos soluções genéricas.
+                {ab.p3}
               </p>
               <p>
-                Cada projeto começa entendendo o negócio, o mercado e o objetivo.
+                {ab.p4}
               </p>
             </div>
 
@@ -92,7 +93,7 @@ export const AboutSection: React.FC<AboutSectionProps> = ({
                   }}
                   className="inline-flex items-center gap-2 font-mono-tabular text-xs uppercase tracking-[0.16em] text-[#C6FF00] hover:underline underline-offset-4 whitespace-nowrap"
                 >
-                  <span>CONHECER A FILOSOFIA DA VULTO</span>
+                  <span>{ab.ctaPhilosophy}</span>
                   <ArrowUpRight className="w-3.5 h-3.5" />
                 </a>
               </div>
@@ -101,7 +102,7 @@ export const AboutSection: React.FC<AboutSectionProps> = ({
         </div>
 
         <div className="mt-16 sm:mt-20 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 border-t border-l border-[#F4F4F1]/12">
-          {ABOUT_CONCEPTS.map((item, idx) => (
+          {concepts.map((item, idx) => (
             <motion.div
               key={item.title}
               initial={{ opacity: 0, y: 14 }}

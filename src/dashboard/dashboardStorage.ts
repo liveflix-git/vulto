@@ -14,9 +14,9 @@ import {
 export const PARTNERS: Record<string, PartnerUser> = {
   felipe: {
     id: 'felipe',
-    name: 'Felipe Camargo',
+    name: 'Felipe',
     role: 'Projetos & Estratégia',
-    avatarInitials: 'FC',
+    avatarInitials: 'F',
     whatsapp: '5513982252557',
   },
   pietro: {

@@ -115,8 +115,8 @@ export async function fetchFinanceDashboardData(): Promise<{
         { id: 's4', name: 'Consultoria de Estratégia Digital' },
       ],
       responsibles: [
-        { id: 'felipe', full_name: 'Felipe Ramos', email: 'felipe@vultolab.company' },
-        { id: 'pietro', full_name: 'Pietro Fontana', email: 'pietro@vultolab.company' },
+        { id: 'felipe', full_name: 'Felipe', email: 'felipe@vultolab.company' },
+        { id: 'pietro', full_name: 'Pietro', email: 'pietro@vultolab.company' },
       ],
       error: 'Supabase não configurado. Exibindo ambiente local de demonstração.',
     };
@@ -143,7 +143,9 @@ export async function fetchFinanceDashboardData(): Promise<{
 
     const profileMap = new Map<string, string>();
     (profilesRes.data || []).forEach((p: any) => {
-      profileMap.set(p.id, p.full_name || p.email);
+      const lower = (p.full_name || p.email || '').toLowerCase();
+      const displayName = lower.includes('felipe') ? 'Felipe' : lower.includes('pietro') ? 'Pietro' : (p.full_name?.split(' ')[0] || 'Sócio');
+      profileMap.set(p.id, displayName);
     });
 
     const mappedSales: FinanceSaleItem[] = (salesRes.data || []).map((s: any) => {
@@ -178,7 +180,7 @@ export async function fetchFinanceDashboardData(): Promise<{
         date: s.date || new Date().toISOString().split('T')[0],
         status: normStatus,
         owner_id: s.owner_id || null,
-        owner_name: s.owner_id ? (profileMap.get(s.owner_id) || 'Sócio') : 'Felipe Ramos',
+        owner_name: s.owner_id ? (profileMap.get(s.owner_id) || 'Felipe') : 'Felipe',
         notes: s.notes || null,
         created_at: s.created_at || new Date().toISOString(),
       };
@@ -192,7 +194,7 @@ export async function fetchFinanceDashboardData(): Promise<{
         amount: Number(e.amount) || 0,
         date: e.date || new Date().toISOString().split('T')[0],
         responsible_id: e.responsible_id || e.user_id || null,
-        responsible_name: e.responsible_id ? (profileMap.get(e.responsible_id) || 'Sócio') : 'Equipe',
+        responsible_name: e.responsible_id ? (profileMap.get(e.responsible_id) || 'Felipe') : 'Felipe',
         created_at: e.created_at || new Date().toISOString(),
       };
     });
@@ -209,11 +211,15 @@ export async function fetchFinanceDashboardData(): Promise<{
       base_price: Number(s.base_price) || 0,
     }));
 
-    const responsibleOptions: FinanceResponsibleOption[] = (profilesRes.data || []).map((p: any) => ({
-      id: p.id,
-      full_name: p.full_name || p.email,
-      email: p.email,
-    }));
+    const responsibleOptions: FinanceResponsibleOption[] = (profilesRes.data || []).map((p: any) => {
+      const lower = (p.full_name || p.email || '').toLowerCase();
+      const displayName = lower.includes('felipe') ? 'Felipe' : lower.includes('pietro') ? 'Pietro' : (p.full_name?.split(' ')[0] || 'Felipe');
+      return {
+        id: p.id,
+        full_name: displayName,
+        email: p.email,
+      };
+    });
 
     // If database returned no entries yet, return defaults
     return {
@@ -228,8 +234,8 @@ export async function fetchFinanceDashboardData(): Promise<{
         { id: 's2', name: 'Gestão de Tráfego & Performance' },
       ],
       responsibles: responsibleOptions.length > 0 ? responsibleOptions : [
-        { id: 'felipe', full_name: 'Felipe Ramos', email: 'felipe@vultolab.company' },
-        { id: 'pietro', full_name: 'Pietro Fontana', email: 'pietro@vultolab.company' },
+        { id: 'felipe', full_name: 'Felipe', email: 'felipe@vultolab.company' },
+        { id: 'pietro', full_name: 'Pietro', email: 'pietro@vultolab.company' },
       ],
       error: null,
     };
@@ -457,7 +463,7 @@ function getMockSales(): FinanceSaleItem[] {
       date: today,
       status: 'PAGO',
       owner_id: 'felipe',
-      owner_name: 'Felipe Ramos',
+      owner_name: 'Felipe',
       created_at: new Date().toISOString(),
     },
     {
@@ -471,7 +477,7 @@ function getMockSales(): FinanceSaleItem[] {
       date: today,
       status: 'PAGO',
       owner_id: 'pietro',
-      owner_name: 'Pietro Fontana',
+      owner_name: 'Pietro',
       created_at: new Date().toISOString(),
     },
     {
@@ -485,7 +491,7 @@ function getMockSales(): FinanceSaleItem[] {
       date: '2026-10-15',
       status: 'PENDENTE',
       owner_id: 'pietro',
-      owner_name: 'Pietro Fontana',
+      owner_name: 'Pietro',
       created_at: new Date().toISOString(),
     },
     {
@@ -499,7 +505,7 @@ function getMockSales(): FinanceSaleItem[] {
       date: '2026-09-28',
       status: 'ATRASADO',
       owner_id: 'felipe',
-      owner_name: 'Felipe Ramos',
+      owner_name: 'Felipe',
       created_at: new Date().toISOString(),
     },
     {
@@ -513,7 +519,7 @@ function getMockSales(): FinanceSaleItem[] {
       date: '2026-09-15',
       status: 'PAGO',
       owner_id: 'felipe',
-      owner_name: 'Felipe Ramos',
+      owner_name: 'Felipe',
       created_at: new Date().toISOString(),
     },
   ];
@@ -529,7 +535,7 @@ function getMockExpenses(): FinanceExpenseItem[] {
       amount: 540,
       date: today,
       responsible_id: 'felipe',
-      responsible_name: 'Felipe Ramos',
+      responsible_name: 'Felipe',
       created_at: new Date().toISOString(),
     },
     {
@@ -539,7 +545,7 @@ function getMockExpenses(): FinanceExpenseItem[] {
       amount: 2200,
       date: today,
       responsible_id: 'pietro',
-      responsible_name: 'Pietro Fontana',
+      responsible_name: 'Pietro',
       created_at: new Date().toISOString(),
     },
     {
@@ -549,7 +555,7 @@ function getMockExpenses(): FinanceExpenseItem[] {
       amount: 780,
       date: '2026-10-02',
       responsible_id: 'felipe',
-      responsible_name: 'Felipe Ramos',
+      responsible_name: 'Felipe',
       created_at: new Date().toISOString(),
     },
     {
@@ -559,7 +565,7 @@ function getMockExpenses(): FinanceExpenseItem[] {
       amount: 1450,
       date: '2026-09-25',
       responsible_id: 'pietro',
-      responsible_name: 'Pietro Fontana',
+      responsible_name: 'Pietro',
       created_at: new Date().toISOString(),
     },
     {
@@ -569,7 +575,7 @@ function getMockExpenses(): FinanceExpenseItem[] {
       amount: 320,
       date: '2026-09-12',
       responsible_id: 'felipe',
-      responsible_name: 'Felipe Ramos',
+      responsible_name: 'Felipe',
       created_at: new Date().toISOString(),
     },
     {
@@ -579,7 +585,7 @@ function getMockExpenses(): FinanceExpenseItem[] {
       amount: 1100,
       date: '2026-09-05',
       responsible_id: 'felipe',
-      responsible_name: 'Felipe Ramos',
+      responsible_name: 'Felipe',
       created_at: new Date().toISOString(),
     },
   ];

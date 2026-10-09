@@ -222,6 +222,100 @@ export async function createCrmLead(lead: {
   }
 }
 
+export async function updateCrmLead(
+  leadId: string,
+  updates: Partial<Omit<CrmLead, 'id' | 'created_at'>>
+): Promise<{ data: CrmLead | null; error: string | null }> {
+  if (!isSupabaseConfigured) {
+    return { data: null, error: 'Supabase não configurado' };
+  }
+
+  try {
+    const payload: any = {
+      updated_at: new Date().toISOString(),
+    };
+    if (updates.name !== undefined) payload.name = updates.name;
+    if (updates.company !== undefined) payload.company = updates.company;
+    if (updates.phone !== undefined) payload.phone = updates.phone;
+    if (updates.email !== undefined) payload.email = updates.email;
+    if (updates.instagram !== undefined) payload.instagram = updates.instagram;
+    if (updates.source !== undefined) payload.source = updates.source;
+    if (updates.service_interest !== undefined) payload.service_interest = updates.service_interest;
+    if (updates.estimated_value !== undefined) {
+      payload.estimated_value = updates.estimated_value;
+      payload.value = updates.estimated_value;
+    }
+    if (updates.assigned_to !== undefined) payload.assigned_to = updates.assigned_to;
+    if (updates.notes !== undefined) payload.notes = updates.notes;
+    if (updates.next_follow_up !== undefined) payload.next_follow_up = updates.next_follow_up;
+    if (updates.status !== undefined) payload.status = updates.status;
+
+    const { data, error } = await supabase
+      .from('leads')
+      .update(payload)
+      .eq('id', leadId)
+      .select()
+      .single();
+
+    if (error) {
+      return { data: null, error: error.message };
+    }
+
+    await logActivity(
+      'LEAD_ATUALIZADO',
+      `Oportunidade atualizada: ${updates.company || data.company || leadId}`
+    );
+
+    return {
+      data: {
+        id: data.id,
+        name: data.name,
+        company: data.company,
+        phone: data.phone,
+        email: data.email,
+        instagram: data.instagram,
+        source: data.source,
+        service_interest: data.service_interest,
+        estimated_value: Number(data.estimated_value || data.value || 0),
+        assigned_to: data.assigned_to,
+        notes: data.notes,
+        next_follow_up: data.next_follow_up,
+        status: data.status,
+        created_at: data.created_at,
+        updated_at: data.updated_at,
+      },
+      error: null,
+    };
+  } catch (err: any) {
+    return { data: null, error: err.message || 'Falha ao atualizar oportunidade' };
+  }
+}
+
+export async function deleteCrmLead(
+  leadId: string,
+  companyName?: string
+): Promise<{ success: boolean; error: string | null }> {
+  if (!isSupabaseConfigured) {
+    return { success: false, error: 'Supabase não configurado' };
+  }
+
+  try {
+    const { error } = await supabase.from('leads').delete().eq('id', leadId);
+    if (error) {
+      return { success: false, error: error.message };
+    }
+
+    await logActivity(
+      'LEAD_EXCLUIDO',
+      `Oportunidade excluída: ${companyName || leadId}`
+    );
+
+    return { success: true, error: null };
+  } catch (err: any) {
+    return { success: false, error: err.message || 'Falha ao excluir oportunidade' };
+  }
+}
+
 export async function updateLeadStage(
   leadId: string,
   newStage: LeadStage,
@@ -472,31 +566,39 @@ export async function createClient(client: {
   }
 }
 
+export function sanitizePartnerName(name?: string | null): string {
+  if (!name) return 'Felipe';
+  const clean = name.trim();
+  const lower = clean.toLowerCase();
+  if (lower.includes('felipe')) return 'Felipe';
+  if (lower.includes('pietro')) return 'Pietro';
+  return clean.split(' ')[0] || clean;
+}
+
 // -------------------------------------------------------------
 // AUXILIARY LISTS (PROFILES & SERVICES)
 // -------------------------------------------------------------
 export async function fetchProfiles(): Promise<ProfileUser[]> {
+  const defaultProfiles: ProfileUser[] = [
+    { id: 'felipe', full_name: 'Felipe', email: 'felipe@vultolab.company', role: 'admin' },
+    { id: 'pietro', full_name: 'Pietro', email: 'pietro@vultolab.company', role: 'admin' },
+  ];
+
   if (!isSupabaseConfigured) {
-    return [
-      { id: 'felipe', full_name: 'Felipe Ramos', email: 'felipe@vultolab.company', role: 'admin' },
-      { id: 'pietro', full_name: 'Pietro Fontana', email: 'pietro@vultolab.company', role: 'admin' },
-    ];
+    return defaultProfiles;
   }
 
   try {
     const { data, error } = await supabase.from('profiles').select('id, full_name, email, role');
     if (error || !data || data.length === 0) {
-      return [
-        { id: 'felipe', full_name: 'Felipe Ramos', email: 'felipe@vultolab.company', role: 'admin' },
-        { id: 'pietro', full_name: 'Pietro Fontana', email: 'pietro@vultolab.company', role: 'admin' },
-      ];
+      return defaultProfiles;
     }
-    return data;
+    return data.map((p) => ({
+      ...p,
+      full_name: sanitizePartnerName(p.full_name),
+    }));
   } catch {
-    return [
-      { id: 'felipe', full_name: 'Felipe Ramos', email: 'felipe@vultolab.company', role: 'admin' },
-      { id: 'pietro', full_name: 'Pietro Fontana', email: 'pietro@vultolab.company', role: 'admin' },
-    ];
+    return defaultProfiles;
   }
 }
 

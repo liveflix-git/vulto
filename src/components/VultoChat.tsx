@@ -2,11 +2,11 @@ import React, { useState, useRef, useEffect } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { X, ArrowUpRight, RotateCcw, MessageSquare } from 'lucide-react';
 import {
-  chatOptions,
   ChatOption,
   ChatActionButton,
   getWhatsAppLink,
 } from '../data/siteData';
+import { useLanguage } from '../context/LanguageContext';
 
 interface VultoChatProps {
   onNavigate: (path: string) => void;
@@ -20,9 +20,16 @@ interface ConversationMessage {
 }
 
 export const VultoChat: React.FC<VultoChatProps> = ({ onNavigate }) => {
+  const { dict } = useLanguage();
+  const chatConfig = dict.vultoChat;
   const [isOpen, setIsOpen] = useState(false);
   const [history, setHistory] = useState<ConversationMessage[]>([]);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
+
+  // Reset conversation history when locale changes
+  useEffect(() => {
+    setHistory([]);
+  }, [dict.locale]);
 
   useEffect(() => {
     if (isOpen && messagesEndRef.current) {
@@ -90,7 +97,7 @@ export const VultoChat: React.FC<VultoChatProps> = ({ onNavigate }) => {
             exit={{ opacity: 0, y: 12, scale: 0.95 }}
             transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
             role="dialog"
-            aria-label="VULTO ASSIST"
+            aria-label={chatConfig.title}
             className="mb-3 w-[calc(100vw-2rem)] sm:w-[380px] max-h-[76vh] bg-[#0A0A0A] border border-[#F4F4F1]/20 shadow-[0_24px_60px_rgba(0,0,0,0.85)] flex flex-col overflow-hidden"
           >
             {/* Header do Chat */}
@@ -99,10 +106,10 @@ export const VultoChat: React.FC<VultoChatProps> = ({ onNavigate }) => {
                 <span className="w-2.5 h-2.5 rounded-full bg-[#C6FF00]" />
                 <div>
                   <span className="font-display font-bold text-xs uppercase tracking-[0.14em] text-[#F4F4F1] block">
-                    VULTO ASSIST
+                    {chatConfig.title}
                   </span>
                   <span className="font-mono-tabular text-[10px] text-[#F4F4F1]/50 block">
-                    ATENDIMENTO GUIADO · VULTO LAB
+                    {chatConfig.subtitle}
                   </span>
                 </div>
               </div>
@@ -112,8 +119,8 @@ export const VultoChat: React.FC<VultoChatProps> = ({ onNavigate }) => {
                   <button
                     type="button"
                     onClick={handleResetChat}
-                    title="Reiniciar conversa"
-                    aria-label="Reiniciar conversa"
+                    title={chatConfig.restartConversation}
+                    aria-label={chatConfig.restartConversation}
                     className="w-8 h-8 inline-flex items-center justify-center text-[#F4F4F1]/60 hover:text-[#C6FF00] transition-colors cursor-pointer"
                   >
                     <RotateCcw className="w-3.5 h-3.5" />
@@ -122,7 +129,7 @@ export const VultoChat: React.FC<VultoChatProps> = ({ onNavigate }) => {
                 <button
                   type="button"
                   onClick={() => setIsOpen(false)}
-                  aria-label="Fechar assistente"
+                  aria-label={chatConfig.closeAssistant}
                   className="w-8 h-8 inline-flex items-center justify-center text-[#F4F4F1]/60 hover:text-[#F4F4F1] transition-colors cursor-pointer"
                 >
                   <X className="w-4 h-4" />
@@ -133,8 +140,8 @@ export const VultoChat: React.FC<VultoChatProps> = ({ onNavigate }) => {
             {/* Corpo do Chat */}
             <div className="p-4 overflow-y-auto space-y-4 flex-1 max-h-[54vh]">
               <div className="bg-[#1A1A1A] border border-[#F4F4F1]/10 p-3.5 text-sm text-[#F4F4F1]/90 leading-relaxed space-y-1">
-                <p className="font-semibold text-[#F4F4F1]">Olá.</p>
-                <p>Como podemos ajudar?</p>
+                <p className="font-semibold text-[#F4F4F1]">{chatConfig.hello}</p>
+                <p>{chatConfig.howCanWeHelp}</p>
               </div>
 
               {history.map((msg) => (
@@ -178,10 +185,10 @@ export const VultoChat: React.FC<VultoChatProps> = ({ onNavigate }) => {
 
               <div className="pt-2">
                 <p className="font-mono-tabular text-[10px] uppercase tracking-[0.16em] text-[#F4F4F1]/45 mb-2.5">
-                  SELECIONE UMA OPÇÃO:
+                  {chatConfig.selectOption}
                 </p>
                 <div className="flex flex-col gap-1.5">
-                  {chatOptions.map((opt) => (
+                  {chatConfig.options.map((opt) => (
                     <button
                       key={opt.id}
                       type="button"
@@ -208,7 +215,7 @@ export const VultoChat: React.FC<VultoChatProps> = ({ onNavigate }) => {
         type="button"
         onClick={() => setIsOpen((prev) => !prev)}
         aria-expanded={isOpen}
-        aria-label={isOpen ? 'Fechar chat VULTO ASSIST' : 'Abrir chat VULTO ASSIST'}
+        aria-label={isOpen ? chatConfig.closeAssistant : chatConfig.openAssistant}
         className="relative w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-[#0A0A0A] border border-[#C6FF00] text-[#C6FF00] hover:scale-105 shadow-[0_0_20px_rgba(198,255,0,0.18)] hover:shadow-[0_0_28px_rgba(198,255,0,0.3)] transition-all duration-250 flex items-center justify-center cursor-pointer group shrink-0"
       >
         {isOpen ? (

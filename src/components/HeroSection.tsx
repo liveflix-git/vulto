@@ -2,30 +2,36 @@ import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
 import { ArrowUpRight, ArrowRight } from 'lucide-react';
 import { VultoArchitecturalMonogram } from './BrandLogo';
-import { LOCALES_DATA } from '../data/siteData';
+import { useLanguage } from '../context/LanguageContext';
 
 interface HeroSectionProps {
   onNavigate: (path: string) => void;
-  currentLocale: 'pt-BR' | 'pt-PT';
+  currentLocale?: 'pt-BR' | 'pt-PT';
 }
 
-const WORDS_TO_TYPE = ['ESTRATÉGIA.', 'MENSAGEM.', 'CONVERSÃO.'];
-
-export const HeroSection: React.FC<HeroSectionProps> = ({ onNavigate, currentLocale }) => {
-  const localeData = LOCALES_DATA[currentLocale];
+export const HeroSection: React.FC<HeroSectionProps> = ({ onNavigate }) => {
+  const { dict } = useLanguage();
+  const heroData = dict.hero;
+  const wordsToType = heroData.typedWords;
   const [typedLines, setTypedLines] = useState<string[]>(['', '', '']);
   const [isTypingDone, setIsTypingOpen] = useState(false);
   const [currentLineIndex, setCurrentLineIndex] = useState(0);
 
   useEffect(() => {
+    setTypedLines(['', '', '']);
+    setIsTypingOpen(false);
+    setCurrentLineIndex(0);
+  }, [heroData.typedWords]);
+
+  useEffect(() => {
     if (isTypingDone) return;
 
-    if (currentLineIndex >= WORDS_TO_TYPE.length) {
+    if (currentLineIndex >= wordsToType.length) {
       setIsTypingOpen(true);
       return;
     }
 
-    const targetWord = WORDS_TO_TYPE[currentLineIndex];
+    const targetWord = wordsToType[currentLineIndex];
     let currentCharIndex = 0;
 
     const interval = setInterval(() => {
@@ -46,7 +52,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onNavigate, currentLoc
     }, 55);
 
     return () => clearInterval(interval);
-  }, [currentLineIndex, isTypingDone]);
+  }, [currentLineIndex, isTypingDone, wordsToType]);
 
   const handleNav = (e: React.MouseEvent, path: string) => {
     e.preventDefault();
@@ -93,7 +99,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onNavigate, currentLoc
             >
               <span className="w-6 h-[1.5px] bg-[#C6FF00] inline-block shrink-0" />
               <span className="font-mono-tabular text-[11px] sm:text-xs tracking-[0.2em] uppercase text-[#F4F4F1]/80 font-semibold">
-                {localeData.heroKicker}
+                {heroData.kicker}
               </span>
             </motion.div>
 
@@ -130,7 +136,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onNavigate, currentLoc
               className="max-w-[300px] sm:max-w-xl space-y-2"
             >
               <p className="text-[15px] sm:text-lg text-[#D0D0D0] lg:text-[#F4F4F1]/85 font-normal leading-relaxed">
-                {localeData.heroSupport}
+                {heroData.support}
               </p>
             </motion.div>
 
@@ -147,7 +153,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onNavigate, currentLoc
                 data-cursor="cta"
                 className="inline-flex items-center justify-center gap-3 px-7 py-4 bg-[#C6FF00] text-[#0A0A0A] text-xs sm:text-sm font-bold uppercase tracking-[0.08em] hover:bg-[#d4ff33] transition-colors duration-150 whitespace-nowrap"
               >
-                <span>{localeData.ctaTalk}</span>
+                <span>{heroData.ctaTalk}</span>
                 <ArrowUpRight className="w-4 h-4 stroke-[2.5]" />
               </a>
 
@@ -156,7 +162,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onNavigate, currentLoc
                 onClick={(e) => handleNav(e, '/servicos')}
                 className="inline-flex items-center justify-center gap-3 px-7 py-4 border border-[#F4F4F1]/20 text-[#F4F4F1] text-xs sm:text-sm font-semibold uppercase tracking-[0.08em] hover:border-[#C6FF00] hover:text-[#C6FF00] transition-colors duration-150 whitespace-nowrap"
               >
-                <span>{localeData.ctaSolutions}</span>
+                <span>{heroData.ctaSolutions}</span>
                 <ArrowRight className="w-4 h-4" />
               </a>
             </motion.div>

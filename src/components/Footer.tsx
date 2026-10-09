@@ -1,13 +1,16 @@
 import React from 'react';
 import { ArrowUpRight } from 'lucide-react';
-import { BRAND_CONFIG, SERVICES_DATA, getWhatsAppLink } from '../data/siteData';
+import { BRAND_CONFIG, getWhatsAppLink } from '../data/siteData';
 import { BrandLogo } from './BrandLogo';
+import { useLanguage } from '../context/LanguageContext';
 
 interface FooterProps {
   onNavigate: (path: string) => void;
 }
 
 export const Footer: React.FC<FooterProps> = ({ onNavigate }) => {
+  const { dict, services } = useLanguage();
+
   const handleNav = (e: React.MouseEvent, path: string) => {
     e.preventDefault();
     onNavigate(path);
@@ -31,14 +34,13 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate }) => {
               <span className="text-[#F4F4F1]/40 mx-1">·</span> Web
             </p>
             <p className="text-sm text-[#F4F4F1]/60 max-w-sm leading-relaxed">
-              Estruturas digitais pensadas para transformar atenção em oportunidade e oportunidade
-              em venda.
+              {dict.footer.description}
             </p>
           </div>
 
           <div className="lg:col-span-2 space-y-4">
             <h3 className="font-mono-tabular text-xs uppercase tracking-[0.2em] text-[#F4F4F1]/45">
-              Navegação
+              {dict.footer.navigationTitle}
             </h3>
             <ul className="space-y-2.5 text-sm">
               <li>
@@ -47,7 +49,7 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate }) => {
                   onClick={(e) => handleNav(e, '/')}
                   className="text-[#F4F4F1]/75 hover:text-[#C6FF00] transition-colors"
                 >
-                  Início
+                  {dict.footer.home}
                 </a>
               </li>
               <li>
@@ -56,7 +58,7 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate }) => {
                   onClick={(e) => handleNav(e, '/servicos')}
                   className="text-[#F4F4F1]/75 hover:text-[#C6FF00] transition-colors"
                 >
-                  Serviços
+                  {dict.footer.services}
                 </a>
               </li>
               <li>
@@ -65,7 +67,7 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate }) => {
                   onClick={(e) => handleNav(e, '/sobre')}
                   className="text-[#F4F4F1]/75 hover:text-[#C6FF00] transition-colors"
                 >
-                  Sobre
+                  {dict.footer.about}
                 </a>
               </li>
               <li>
@@ -74,7 +76,7 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate }) => {
                   onClick={(e) => handleNav(e, '/contato')}
                   className="text-[#F4F4F1]/75 hover:text-[#C6FF00] transition-colors"
                 >
-                  Contato
+                  {dict.footer.contact}
                 </a>
               </li>
             </ul>
@@ -82,10 +84,10 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate }) => {
 
           <div className="lg:col-span-3 space-y-4">
             <h3 className="font-mono-tabular text-xs uppercase tracking-[0.2em] text-[#F4F4F1]/45">
-              Serviços
+              {dict.footer.servicesTitle}
             </h3>
             <ul className="space-y-2.5 text-sm">
-              {SERVICES_DATA.map((service) => (
+              {services.map((service) => (
                 <li key={service.id}>
                   <a
                     href={`/${service.slug}`}
@@ -102,7 +104,7 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate }) => {
           <div className="lg:col-span-2 space-y-6">
             <div className="space-y-3">
               <h3 className="font-mono-tabular text-xs uppercase tracking-[0.2em] text-[#F4F4F1]/45">
-                Redes
+                {dict.footer.socialTitle}
               </h3>
               <ul className="space-y-2 text-sm">
                 <li>
@@ -121,7 +123,7 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate }) => {
 
             <div className="space-y-3">
               <h3 className="font-mono-tabular text-xs uppercase tracking-[0.2em] text-[#F4F4F1]/45">
-                Contato
+                {dict.footer.contactTitle}
               </h3>
               <ul className="space-y-2 text-sm">
                 <li>
@@ -155,13 +157,13 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate }) => {
             <span className="text-[#C6FF00] text-3xl sm:text-5xl font-mono-tabular tracking-[0.1em]">LAB</span>
           </div>
           <span className="font-mono-tabular text-xs uppercase tracking-[0.22em] text-[#F4F4F1]/45">
-            ACQUISITION &amp; CONVERSION LAB
+            {dict.footer.labSubtitle}
           </span>
         </div>
 
         <div className="pt-8 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 font-mono-tabular text-xs text-[#F4F4F1]/45">
-          <p>© VULTO LAB 2026</p>
-          <p>Todos os direitos reservados.</p>
+          <p>{dict.footer.copyright}</p>
+          <p>{dict.footer.allRightsReserved}</p>
         </div>
       </div>
     </footer>

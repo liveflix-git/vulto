@@ -35,6 +35,7 @@ interface OverviewViewProps {
 }
 
 export function OverviewView({
+  state,
   onNavigateTab,
   currentUser,
   onOpenNewRecord,
@@ -279,44 +280,20 @@ export function OverviewView({
             </div>
           </div>
 
-          {/* META DO DIA */}
+          {/* PROJETOS ATIVOS */}
           <div className="bg-[#111111] border border-white/10 p-4 hover:border-white/20 transition-colors">
-            <div className="flex items-center justify-between text-white/50 mb-1.5">
+            <div className="flex items-center justify-between text-white/50 mb-2">
               <span className="text-[11px] font-mono uppercase tracking-wider">
-                META DO DIA
+                PROJETOS ATIVOS
               </span>
-              <Target className="w-4 h-4 text-[#C6FF00]" />
+              <Layers className="w-4 h-4 text-[#C6FF00]" />
             </div>
-
-            <div className="flex items-baseline justify-between gap-2">
-              <div className="text-lg sm:text-xl font-bold font-mono text-white truncate">
-                {formatCurrencyBRL(todayGoal.achieved)}
-              </div>
-              <div className="text-xs font-mono text-white/50">
-                / {todayGoal.target > 0 ? formatCurrencyBRL(todayGoal.target) : 'R$ 0,00'}
-              </div>
+            <div className="text-xl sm:text-2xl font-bold font-mono text-white tracking-tight">
+              {state.projects.filter((p) => p.status === 'in_progress' || p.status === 'review').length}
             </div>
-
-            {/* Barra de Progresso */}
-            <div className="mt-2.5">
-              <div className="w-full bg-[#1A1A1A] h-1.5 overflow-hidden">
-                <div
-                  className="bg-[#C6FF00] h-full transition-all duration-500"
-                  style={{
-                    width: `${Math.min(100, Math.max(0, todayGoal.percentage))}%`,
-                  }}
-                />
-              </div>
-              <div className="flex items-center justify-between text-[10px] font-mono text-white/40 mt-1">
-                <span>
-                  {todayGoal.target > 0
-                    ? `${todayGoal.percentage.toFixed(1)}% atingido`
-                    : 'Meta diária não cadastrada'}
-                </span>
-                {todayGoal.target > 0 && todayGoal.achieved >= todayGoal.target && (
-                  <span className="text-[#C6FF00] font-bold">Meta batida!</span>
-                )}
-              </div>
+            <div className="text-[11px] font-mono text-white/40 mt-1 flex items-center justify-between">
+              <span>Sprints em execução</span>
+              <span className="text-[#C6FF00] font-bold">Operação ativa</span>
             </div>
           </div>
         </div>
@@ -440,122 +417,108 @@ export function OverviewView({
             </div>
           </div>
 
-          {/* META MENSAL */}
+          {/* TOTAL PROJETOS */}
           <div className="bg-[#111111] border border-white/10 p-4">
             <div className="text-[11px] font-mono uppercase text-white/40 mb-1.5 flex items-center justify-between">
-              <span>META MENSAL</span>
-              <Target className="w-3.5 h-3.5 text-[#C6FF00]" />
+              <span>TOTAL PROJETOS</span>
+              <Layers className="w-3.5 h-3.5 text-[#C6FF00]" />
             </div>
             <div className="text-lg sm:text-xl font-bold font-mono text-white">
-              {formatCurrencyBRL(monthGoalTarget)}
+              {state.projects.length}
             </div>
             <div className="text-[10px] font-mono text-white/40 mt-1">
-              {monthGoalTarget > 0 ? 'Meta cadastrada' : 'Não definida'}
+              Carteira operacional
             </div>
           </div>
         </div>
       </div>
 
       {/* ================================================================ */}
-      {/* SEÇÃO 3 & 4: META MENSAL DETALHADA + FUNIL COMERCIAL             */}
+      {/* SEÇÃO 3 & 4: DEMANDAS OPERACIONAIS & PIPELINE COMERCIAL          */}
       {/* ================================================================ */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* BLOCO: META MENSAL DETALHADA */}
+        {/* BLOCO: PROJETOS & SPRINT DELIVERY */}
         <div className="bg-[#111111] border border-white/10 p-5 flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between pb-3 mb-4 border-b border-white/10">
               <div>
                 <h3 className="text-xs font-mono font-bold text-white uppercase tracking-wider flex items-center gap-2">
-                  <Target className="w-4 h-4 text-[#C6FF00]" />
-                  <span>PROGRESSO DA META MENSAL</span>
+                  <Layers className="w-4 h-4 text-[#C6FF00]" />
+                  <span>PROJETOS & SPRINT DELIVERY</span>
                 </h3>
                 <p className="text-[11px] text-white/40 font-sans mt-0.5">
-                  Acompanhamento de metas para {monthNameUpper}
+                  Demandas e prazos operacionais da VULTO LAB
                 </p>
               </div>
 
               <span className="text-xs font-mono px-2 py-0.5 bg-[#141414] border border-white/10 text-[#C6FF00] font-bold">
-                {monthlyGoalProgress.percentage.toFixed(1)}%
+                {state.projects.filter((p) => p.status === 'in_progress' || p.status === 'review').length} ATIVOS
               </span>
             </div>
 
-            {/* Barra de progresso */}
-            <div className="w-full bg-[#181818] h-2 mb-4 overflow-hidden">
-              <div
-                className="bg-[#C6FF00] h-full transition-all duration-700"
-                style={{
-                  width: `${Math.min(100, Math.max(0, monthlyGoalProgress.percentage))}%`,
-                }}
-              />
+            {/* Grid de status rápido de projetos */}
+            <div className="grid grid-cols-3 gap-2.5 mb-4">
+              <div className="bg-[#141414] border border-white/5 p-3">
+                <span className="text-[10px] font-mono uppercase text-white/40 block mb-1">
+                  Em Andamento
+                </span>
+                <span className="text-base font-mono font-bold text-amber-400 block">
+                  {state.projects.filter((p) => p.status === 'in_progress').length}
+                </span>
+              </div>
+              <div className="bg-[#141414] border border-white/5 p-3">
+                <span className="text-[10px] font-mono uppercase text-white/40 block mb-1">
+                  Em Revisão
+                </span>
+                <span className="text-base font-mono font-bold text-cyan-400 block">
+                  {state.projects.filter((p) => p.status === 'review').length}
+                </span>
+              </div>
+              <div className="bg-[#141414] border border-white/5 p-3">
+                <span className="text-[10px] font-mono uppercase text-white/40 block mb-1">
+                  Entregues
+                </span>
+                <span className="text-base font-mono font-bold text-[#C6FF00] block">
+                  {state.projects.filter((p) => p.status === 'delivered').length}
+                </span>
+              </div>
             </div>
 
-            {/* Grid dos 6 indicadores da meta */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-              <div className="bg-[#141414] border border-white/5 p-3">
-                <span className="text-[10px] font-mono uppercase text-white/40 block mb-1">
-                  Meta
-                </span>
-                <span className="text-sm font-mono font-bold text-white block">
-                  {formatCurrencyBRL(monthlyGoalProgress.target)}
-                </span>
-              </div>
-
-              <div className="bg-[#141414] border border-white/5 p-3">
-                <span className="text-[10px] font-mono uppercase text-white/40 block mb-1">
-                  Realizado
-                </span>
-                <span className="text-sm font-mono font-bold text-[#C6FF00] block">
-                  {formatCurrencyBRL(monthlyGoalProgress.achieved)}
-                </span>
-              </div>
-
-              <div className="bg-[#141414] border border-white/5 p-3">
-                <span className="text-[10px] font-mono uppercase text-white/40 block mb-1">
-                  Faltante
-                </span>
-                <span className="text-sm font-mono font-bold text-white block">
-                  {formatCurrencyBRL(monthlyGoalProgress.remaining)}
-                </span>
-              </div>
-
-              <div className="bg-[#141414] border border-white/5 p-3">
-                <span className="text-[10px] font-mono uppercase text-white/40 block mb-1">
-                  Percentual
-                </span>
-                <span className="text-sm font-mono font-bold text-white block">
-                  {monthlyGoalProgress.percentage.toFixed(1)}%
-                </span>
-              </div>
-
-              <div className="bg-[#141414] border border-white/5 p-3">
-                <span className="text-[10px] font-mono uppercase text-white/40 block mb-1">
-                  Dias Restantes
-                </span>
-                <span className="text-sm font-mono font-bold text-white block">
-                  {monthlyGoalProgress.daysRemaining} dias
-                </span>
-              </div>
-
-              <div className="bg-[#141414] border border-white/5 p-3">
-                <span className="text-[10px] font-mono uppercase text-white/40 block mb-1">
-                  Média Diária Nec.
-                </span>
-                <span className="text-sm font-mono font-bold text-[#C6FF00] block">
-                  {formatCurrencyBRL(monthlyGoalProgress.dailyRequired)}
-                </span>
-              </div>
+            {/* Lista dos projetos mais recentes */}
+            <div className="space-y-2">
+              {state.projects.slice(0, 3).map((proj) => (
+                <div
+                  key={proj.id}
+                  className="p-2.5 bg-[#141414] border border-white/5 flex items-center justify-between gap-3 text-xs font-mono"
+                >
+                  <div className="truncate flex-1">
+                    <span className="text-white font-bold block truncate">{proj.title}</span>
+                    <span className="text-[10px] text-white/40 block truncate">
+                      {proj.clientName} • Sócio: {proj.leadPartner === 'pietro' ? 'Pietro' : 'Felipe'}
+                    </span>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <span className="text-[10px] font-mono text-[#C6FF00] font-bold block">
+                      {proj.progressPercent}%
+                    </span>
+                    <span className="text-[9px] text-white/30 block">
+                      {proj.status === 'in_progress' ? 'Em produção' : proj.status === 'delivered' ? 'Entregue' : 'Revisão'}
+                    </span>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
 
           <div className="pt-4 mt-4 border-t border-white/10 flex items-center justify-between text-[11px] font-mono text-white/50">
             <span>
-              Cálculo: faltante / {monthlyGoalProgress.daysRemaining} dias restantes
+              Total de Demandas: <strong className="text-white">{state.projects.length}</strong>
             </span>
             <button
-              onClick={() => onNavigateTab('goals')}
-              className="text-[#C6FF00] hover:underline flex items-center gap-1 cursor-pointer"
+              onClick={() => onNavigateTab('projects')}
+              className="text-[#C6FF00] hover:underline flex items-center gap-1 cursor-pointer font-bold"
             >
-              <span>Configurar Metas</span>
+              <span>Ver Projetos & Entregas</span>
               <ArrowRight className="w-3 h-3" />
             </button>
           </div>
@@ -631,10 +594,10 @@ export function OverviewView({
           <div className="pt-4 mt-4 border-t border-white/10 flex items-center justify-between text-[11px] font-mono text-white/50">
             <span>Total de Leads Registrados: <strong className="text-white">{funnel.totalLeads}</strong></span>
             <button
-              onClick={() => onNavigateTab('pipeline')}
+              onClick={() => onNavigateTab('finance')}
               className="text-[#C6FF00] hover:underline flex items-center gap-1 cursor-pointer"
             >
-              <span>Ver Pipeline / CRM</span>
+              <span>Ver Oportunidades & Propostas</span>
               <ArrowRight className="w-3 h-3" />
             </button>
           </div>

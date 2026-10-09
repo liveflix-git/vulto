@@ -1,16 +1,18 @@
 import React from 'react';
 import { motion } from 'motion/react';
-import { VULTO_METRICS } from '../data/siteData';
+import { useLanguage } from '../context/LanguageContext';
 
 export const MetricsBar: React.FC = () => {
+  const { dict, metrics } = useLanguage();
+
   return (
     <section
-      aria-label="Diferenciais e métricas da Vulto Lab"
+      aria-label={dict.metricsBar.ariaLabel}
       className="bg-[#0A0A0A] border-b border-[#F4F4F1]/10"
     >
       <div className="max-w-[1440px] mx-auto px-6 sm:px-8 lg:px-12">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 divide-y sm:divide-y-0 sm:divide-x divide-[#F4F4F1]/10 border-x border-[#F4F4F1]/[0.05]">
-          {VULTO_METRICS.map((metric, idx) => (
+          {metrics.map((metric, idx) => (
             <motion.div
               key={metric.index}
               initial={{ opacity: 0, y: 12 }}

@@ -24,6 +24,12 @@ import {
   ChevronDown,
   Layers,
   Sparkles,
+  Briefcase,
+  User,
+  Building2,
+  Phone,
+  Mail,
+  ArrowRight,
 } from 'lucide-react';
 import {
   fetchFinanceDashboardData,
@@ -41,6 +47,16 @@ import {
   FinanceServiceOption,
   FinanceResponsibleOption,
 } from '../../services/financeService';
+import {
+  fetchCrmLeads,
+  createCrmLead,
+  updateCrmLead,
+  deleteCrmLead,
+  updateLeadStage,
+  convertLeadToClientAndSale,
+  CrmLead,
+  LeadStage,
+} from '../../services/crmService';
 import { formatCurrencyBRL } from '../../services/dashboardService';
 
 const EXPENSE_CATEGORIES: ExpenseCategory[] = [
@@ -59,6 +75,7 @@ const EXPENSE_CATEGORIES: ExpenseCategory[] = [
 export function FinanceViewReal() {
   const [sales, setSales] = useState<FinanceSaleItem[]>([]);
   const [expenses, setExpenses] = useState<FinanceExpenseItem[]>([]);
+  const [leads, setLeads] = useState<CrmLead[]>([]);
   const [clients, setClients] = useState<FinanceClientOption[]>([]);
   const [services, setServices] = useState<FinanceServiceOption[]>([]);
   const [responsibles, setResponsibles] = useState<FinanceResponsibleOption[]>([]);
@@ -67,10 +84,11 @@ export function FinanceViewReal() {
   const [errorNotice, setErrorNotice] = useState<string | null>(null);
 
   // Tab & Filters
-  const [activeTab, setActiveTab] = useState<'overview' | 'sales' | 'expenses'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'sales' | 'deals' | 'expenses'>('overview');
   const [searchQuery, setSearchQuery] = useState('');
   const [periodFilter, setPeriodFilter] = useState<'all' | 'month' | 'year' | 'custom'>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | SaleStatus>('all');
+  const [leadStatusFilter, setLeadStatusFilter] = useState<'all' | LeadStage>('all');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [responsibleFilter, setResponsibleFilter] = useState<string>('all');
   const [startDate, setStartDate] = useState('');
@@ -79,10 +97,13 @@ export function FinanceViewReal() {
   // Modals
   const [isSaleModalOpen, setIsSaleModalOpen] = useState(false);
   const [isExpenseModalOpen, setIsExpenseModalOpen] = useState(false);
+  const [isLeadModalOpen, setIsLeadModalOpen] = useState(false);
   const [editingSale, setEditingSale] = useState<FinanceSaleItem | null>(null);
   const [editingExpense, setEditingExpense] = useState<FinanceExpenseItem | null>(null);
+  const [editingLead, setEditingLead] = useState<CrmLead | null>(null);
+  const [convertingLead, setConvertingLead] = useState<CrmLead | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<{
-    type: 'sale' | 'expense';
+    type: 'sale' | 'expense' | 'lead';
     id: string;
     description: string;
   } | null>(null);
@@ -90,12 +111,16 @@ export function FinanceViewReal() {
   // Load Data
   const loadData = useCallback(async () => {
     try {
-      const res = await fetchFinanceDashboardData();
+      const [res, leadsData] = await Promise.all([
+        fetchFinanceDashboardData(),
+        fetchCrmLeads(),
+      ]);
       setSales(res.sales);
       setExpenses(res.expenses);
       setClients(res.clients);
       setServices(res.services);
       setResponsibles(res.responsibles);
+      setLeads(leadsData);
       if (res.error && !res.sales.length) {
         setErrorNotice(res.error);
       } else {
@@ -189,6 +214,28 @@ export function FinanceViewReal() {
     });
   }, [expenses, isInDateRange, categoryFilter, responsibleFilter, searchQuery]);
 
+  // Filtered Leads / Commercial Opportunities
+  const filteredLeads = useMemo(() => {
+    return leads.filter((l) => {
+      if (leadStatusFilter !== 'all' && l.status !== leadStatusFilter) return false;
+      if (responsibleFilter !== 'all') {
+        const matchesResp =
+          l.assigned_to === responsibleFilter ||
+          (l.assigned_name || '').toLowerCase().includes(responsibleFilter.toLowerCase());
+        if (!matchesResp) return false;
+      }
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase();
+        const comp = (l.company || '').toLowerCase();
+        const contact = (l.name || '').toLowerCase();
+        const serv = (l.service_interest || '').toLowerCase();
+        const notes = (l.notes || '').toLowerCase();
+        if (!comp.includes(q) && !contact.includes(q) && !serv.includes(q) && !notes.includes(q)) return false;
+      }
+      return true;
+    });
+  }, [leads, leadStatusFilter, responsibleFilter, searchQuery]);
+
   // KPIs Calculations based on period filter
   const kpis = useMemo(() => {
     // Entradas recebidas (apenas status PAGO)
@@ -210,8 +257,23 @@ export function FinanceViewReal() {
     // Margem de Lucro (%) = (Lucro / Receita Paga) * 100
     const netMargin = paidRevenue > 0 ? (netProfit / paidRevenue) * 100 : 0;
 
-    // A Pagar (estimativa de despesas futuras do mês se houver, ou 0 caso não tenhamos despesa agendada)
-    const aPagar = 0;
+    // Pipeline Comercial em Aberto (PROPOSTA ou NEGOCIACAO)
+    const activePipelineLeads = leads.filter(
+      (l) => l.status === 'PROPOSTA' || l.status === 'NEGOCIACAO'
+    );
+    const pipelineValue = activePipelineLeads.reduce(
+      (acc, l) => acc + (l.estimated_value || 0),
+      0
+    );
+    const activeDealsCount = activePipelineLeads.length;
+
+    // Negócios Fechados
+    const closedLeads = leads.filter((l) => l.status === 'FECHADOS');
+    const closedDealsCount = closedLeads.length;
+    const closedDealsValue = closedLeads.reduce(
+      (acc, l) => acc + (l.estimated_value || 0),
+      0
+    );
 
     return {
       paidRevenue,
@@ -219,9 +281,12 @@ export function FinanceViewReal() {
       totalExp,
       netProfit,
       netMargin,
-      aPagar,
+      pipelineValue,
+      activeDealsCount,
+      closedDealsCount,
+      closedDealsValue,
     };
-  }, [filteredSales, filteredExpenses]);
+  }, [filteredSales, filteredExpenses, leads]);
 
   // Monthly Chart Data (Receita vs Despesas vs Lucro)
   const monthlyChartData = useMemo(() => {
@@ -393,6 +458,13 @@ export function FinanceViewReal() {
         } else {
           alert('Erro ao excluir venda: ' + res.error);
         }
+      } else if (deleteConfirm.type === 'lead') {
+        const res = await deleteCrmLead(deleteConfirm.id, deleteConfirm.description);
+        if (res.success) {
+          setLeads((prev) => prev.filter((l) => l.id !== deleteConfirm.id));
+        } else {
+          alert('Erro ao excluir oportunidade: ' + res.error);
+        }
       } else {
         const res = await deleteFinanceExpense(deleteConfirm.id, deleteConfirm.description);
         if (res.success) {
@@ -405,6 +477,21 @@ export function FinanceViewReal() {
       alert('Erro ao excluir registro');
     } finally {
       setDeleteConfirm(null);
+    }
+  };
+
+  const handleLeadStageChange = async (leadId: string, company: string, newStage: LeadStage) => {
+    // optimistic update
+    setLeads((prev) =>
+      prev.map((l) => (l.id === leadId ? { ...l, status: newStage } : l))
+    );
+    try {
+      const res = await updateLeadStage(leadId, newStage, company);
+      if (!res.success) {
+        console.warn('Erro ao atualizar etapa no Supabase:', res.error);
+      }
+    } catch (err) {
+      console.error(err);
     }
   };
 
@@ -426,7 +513,7 @@ export function FinanceViewReal() {
             Gestão Financeira & Fluxo de Caixa
           </h1>
           <p className="text-xs text-white/60 font-sans mt-0.5">
-            Controle ágil e consolidado de faturamento, despesas operacionais, margens e recebíveis.
+            Controle ágil e consolidado de faturamento, propostas comerciais, despesas e recebíveis.
           </p>
         </div>
 
@@ -458,6 +545,17 @@ export function FinanceViewReal() {
           >
             <Plus className="w-4 h-4 stroke-[2.5]" />
             <span>+ NOVA VENDA</span>
+          </button>
+
+          <button
+            onClick={() => {
+              setEditingLead(null);
+              setIsLeadModalOpen(true);
+            }}
+            className="px-3.5 py-2 bg-[#1C1C1C] hover:bg-[#252525] border border-[#C6FF00]/40 text-[#C6FF00] font-mono font-bold text-xs tracking-wider flex items-center gap-1.5 transition-colors cursor-pointer"
+          >
+            <Plus className="w-4 h-4 stroke-[2.5]" />
+            <span>+ NOVA PROPOSTA</span>
           </button>
 
           <button
@@ -552,17 +650,17 @@ export function FinanceViewReal() {
           </div>
         </div>
 
-        {/* A PAGAR */}
+        {/* PIPELINE EM NEGOCIAÇÃO */}
         <div className="bg-[#111111] border border-white/10 p-4 relative overflow-hidden">
           <div className="flex items-center justify-between text-white/40 mb-1">
-            <span className="text-[10px] font-mono uppercase tracking-wider">A PAGAR</span>
-            <AlertTriangle className="w-3.5 h-3.5 text-white/30" />
+            <span className="text-[10px] font-mono uppercase tracking-wider">PIPELINE ATIVO</span>
+            <Briefcase className="w-3.5 h-3.5 text-[#C6FF00]" />
           </div>
-          <div className="text-lg sm:text-xl font-bold font-mono text-white">
-            R$ 0,00
+          <div className="text-lg sm:text-xl font-bold font-mono text-[#C6FF00]">
+            {formatCurrencyBRL(kpis.pipelineValue)}
           </div>
           <div className="text-[10px] font-mono text-white/40 mt-1">
-            Sem débitos vencendo
+            {kpis.activeDealsCount} propostas em negociação
           </div>
         </div>
       </div>
@@ -571,7 +669,7 @@ export function FinanceViewReal() {
       <div className="bg-[#111111] border border-white/10 p-4 space-y-3">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
           {/* Main Navigation Switch */}
-          <div className="flex items-center gap-1.5 p-1 bg-[#161616] border border-white/10">
+          <div className="flex flex-wrap items-center gap-1.5 p-1 bg-[#161616] border border-white/10">
             <button
               onClick={() => setActiveTab('overview')}
               className={`px-3 py-1.5 text-xs font-mono font-bold tracking-wider transition-colors cursor-pointer ${
@@ -580,7 +678,7 @@ export function FinanceViewReal() {
                   : 'text-white/60 hover:text-white'
               }`}
             >
-              VISÃO GERAL & GRÁFICOS
+              VISÃO GERAL & FLUXO
             </button>
             <button
               onClick={() => setActiveTab('sales')}
@@ -590,7 +688,17 @@ export function FinanceViewReal() {
                   : 'text-white/60 hover:text-white'
               }`}
             >
-              ENTRADAS ({filteredSales.length})
+              ENTRADAS & VENDAS ({filteredSales.length})
+            </button>
+            <button
+              onClick={() => setActiveTab('deals')}
+              className={`px-3 py-1.5 text-xs font-mono font-bold tracking-wider transition-colors cursor-pointer ${
+                activeTab === 'deals'
+                  ? 'bg-[#C6FF00] text-[#0A0A0A]'
+                  : 'text-white/60 hover:text-white'
+              }`}
+            >
+              OPORTUNIDADES & PROPOSTAS ({filteredLeads.length})
             </button>
             <button
               onClick={() => setActiveTab('expenses')}
@@ -656,7 +764,7 @@ export function FinanceViewReal() {
             <Search className="w-3.5 h-3.5 text-white/40 absolute left-3 top-2.5" />
             <input
               type="text"
-              placeholder="Buscar por cliente, serviço ou descrição..."
+              placeholder={activeTab === 'deals' ? 'Buscar empresa, contato ou proposta...' : 'Buscar por cliente, serviço ou descrição...'}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full bg-[#161616] border border-white/10 pl-9 pr-3 py-1.5 text-xs text-white placeholder-white/30 font-mono focus:border-[#C6FF00] focus:outline-none"
@@ -693,6 +801,23 @@ export function FinanceViewReal() {
                 <option value="PAGO">Pago</option>
                 <option value="PENDENTE">Pendente</option>
                 <option value="ATRASADO">Atrasado</option>
+              </select>
+            )}
+
+            {/* Status Filter for Deals / Proposals */}
+            {activeTab === 'deals' && (
+              <select
+                value={leadStatusFilter}
+                onChange={(e) => setLeadStatusFilter(e.target.value as any)}
+                className="bg-[#161616] border border-white/10 px-2.5 py-1.5 text-xs font-mono text-white focus:border-[#C6FF00] focus:outline-none"
+              >
+                <option value="all">Etapa: Todas</option>
+                <option value="PROPOSTA">Proposta</option>
+                <option value="NEGOCIACAO">Negociação</option>
+                <option value="FECHADOS">Fechado</option>
+                <option value="PERDIDOS">Perdido</option>
+                <option value="CONTATO">Primeiro Contato</option>
+                <option value="LEADS">Novo Lead</option>
               </select>
             )}
 
@@ -1036,6 +1161,172 @@ export function FinanceViewReal() {
         </div>
       )}
 
+      {/* TAB CONTENT: 2. OPORTUNIDADES & PROPOSTAS COMERCIAIS */}
+      {activeTab === 'deals' && (
+        <div className="bg-[#111111] border border-white/10 overflow-hidden">
+          <div className="p-4 border-b border-white/10 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-[#141414]">
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-mono text-[#C6FF00] font-bold uppercase">
+                  // OPORTUNIDADES COMERCIAIS & PROPOSTAS
+                </span>
+                <span className="text-white/30 text-xs">({filteredLeads.length} propostas)</span>
+              </div>
+              <div className="hidden md:flex items-center gap-2 text-[11px] font-mono pl-3 border-l border-white/10">
+                <span className="text-white/40">Pipeline Ativo:</span>
+                <span className="text-[#C6FF00] font-bold">{formatCurrencyBRL(kpis.pipelineValue)}</span>
+                <span className="text-white/20">•</span>
+                <span className="text-white/40">Fechados:</span>
+                <span className="text-emerald-400 font-bold">{kpis.closedDealsCount} ({formatCurrencyBRL(kpis.closedDealsValue)})</span>
+              </div>
+            </div>
+            <button
+              onClick={() => {
+                setEditingLead(null);
+                setIsLeadModalOpen(true);
+              }}
+              className="px-3 py-1.5 bg-[#C6FF00] text-[#0A0A0A] font-mono font-bold text-xs flex items-center gap-1.5 cursor-pointer hover:bg-[#b0e600] shrink-0"
+            >
+              <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
+              <span>+ NOVA PROPOSTA</span>
+            </button>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="border-b border-white/10 bg-[#161616] text-[10px] font-mono uppercase text-white/40 tracking-wider">
+                  <th className="py-3 px-4">Empresa / Cliente</th>
+                  <th className="py-3 px-4">Contato & Canal</th>
+                  <th className="py-3 px-4">Serviço de Interesse</th>
+                  <th className="py-3 px-4">Responsável</th>
+                  <th className="py-3 px-4 text-center">Etapa / Status</th>
+                  <th className="py-3 px-4 text-right">Valor Negociado</th>
+                  <th className="py-3 px-4 text-right">Ações</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-white/5 font-mono text-xs">
+                {filteredLeads.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="py-12 text-center text-white/40 text-xs">
+                      Nenhuma oportunidade comercial encontrada com os filtros selecionados.
+                    </td>
+                  </tr>
+                ) : (
+                  filteredLeads.map((lead) => {
+                    const isClosed = lead.status === 'FECHADOS';
+                    const isNegotiating = lead.status === 'NEGOCIACAO';
+                    const isProposal = lead.status === 'PROPOSTA';
+                    const isLost = lead.status === 'PERDIDOS';
+                    const respName = lead.assigned_to === 'pietro' ? 'Pietro' : 'Felipe';
+
+                    return (
+                      <tr key={lead.id} className="hover:bg-white/[0.02] transition-colors">
+                        <td className="py-3.5 px-4">
+                          <div className="text-white font-bold flex items-center gap-1.5">
+                            <Building2 className="w-3.5 h-3.5 text-[#C6FF00] shrink-0" />
+                            <span>{lead.company}</span>
+                          </div>
+                          {lead.notes && (
+                            <div className="text-[11px] text-white/40 font-sans mt-0.5 line-clamp-1 max-w-xs">
+                              {lead.notes}
+                            </div>
+                          )}
+                        </td>
+                        <td className="py-3.5 px-4">
+                          <div className="text-white font-medium">{lead.name}</div>
+                          <div className="text-[11px] text-white/40 font-sans mt-0.5 flex items-center gap-2">
+                            {lead.phone && <span>{lead.phone}</span>}
+                            {lead.email && <span className="truncate max-w-[140px]">{lead.email}</span>}
+                          </div>
+                        </td>
+                        <td className="py-3.5 px-4">
+                          <div className="text-white/90">{lead.service_interest || 'Geral'}</div>
+                          <div className="text-[10px] text-white/30 uppercase mt-0.5">
+                            Origem: {lead.source || 'Direto'}
+                          </div>
+                        </td>
+                        <td className="py-3.5 px-4 text-white/70 text-[11px]">
+                          {respName}
+                        </td>
+                        <td className="py-3.5 px-4 text-center whitespace-nowrap">
+                          <select
+                            value={lead.status}
+                            onChange={(e) =>
+                              handleLeadStageChange(lead.id, lead.company, e.target.value as LeadStage)
+                            }
+                            className={`text-[10px] font-mono font-bold px-2 py-1 border focus:outline-none cursor-pointer bg-[#141414] ${
+                              isClosed
+                                ? 'border-[#C6FF00]/40 text-[#C6FF00]'
+                                : isNegotiating
+                                ? 'border-amber-400/40 text-amber-400'
+                                : isProposal
+                                ? 'border-cyan-400/40 text-cyan-400'
+                                : isLost
+                                ? 'border-red-400/40 text-red-400'
+                                : 'border-white/20 text-white/70'
+                            }`}
+                          >
+                            <option value="PROPOSTA">PROPOSTA</option>
+                            <option value="NEGOCIACAO">NEGOCIAÇÃO</option>
+                            <option value="CONTATO">CONTATO</option>
+                            <option value="LEADS">LEAD</option>
+                            <option value="FECHADOS">FECHADO</option>
+                            <option value="PERDIDOS">PERDIDO</option>
+                          </select>
+                        </td>
+                        <td className="py-3.5 px-4 text-right whitespace-nowrap font-bold text-white">
+                          <span className={isClosed ? 'text-[#C6FF00]' : isNegotiating ? 'text-amber-400' : 'text-white'}>
+                            {formatCurrencyBRL(lead.estimated_value)}
+                          </span>
+                        </td>
+                        <td className="py-3.5 px-4 text-right whitespace-nowrap">
+                          <div className="flex items-center justify-end gap-1.5">
+                            {!isClosed && (
+                              <button
+                                onClick={() => setConvertingLead(lead)}
+                                className="px-2 py-1 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 text-[10px] font-bold flex items-center gap-1 transition-colors cursor-pointer"
+                                title="Converter em Venda & Lançar no Caixa"
+                              >
+                                <DollarSign className="w-3 h-3" />
+                                <span>CONVERTER</span>
+                              </button>
+                            )}
+                            <button
+                              onClick={() => {
+                                setEditingLead(lead);
+                                setIsLeadModalOpen(true);
+                              }}
+                              className="p-1.5 bg-[#181818] hover:bg-[#252525] border border-white/10 text-white/70 hover:text-white transition-colors cursor-pointer"
+                              title="Editar oportunidade"
+                            >
+                              <Edit2 className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={() =>
+                                setDeleteConfirm({
+                                  type: 'lead',
+                                  id: lead.id,
+                                  description: `${lead.company}: ${lead.name} (${formatCurrencyBRL(lead.estimated_value)})`,
+                                })
+                              }
+                              className="p-1.5 bg-[#181818] hover:bg-red-900/30 border border-red-500/20 text-red-400 hover:text-red-300 transition-colors cursor-pointer"
+                              title="Excluir oportunidade"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
       {/* TAB CONTENT: 3. DESPESAS (EXPENSES) */}
       {activeTab === 'expenses' && (
         <div className="bg-[#111111] border border-white/10 overflow-hidden">
@@ -1161,6 +1452,36 @@ export function FinanceViewReal() {
           onSaved={() => {
             setIsExpenseModalOpen(false);
             loadData();
+          }}
+        />
+      )}
+
+      {/* MODAL: NOVA / EDITAR PROPOSTA */}
+      {isLeadModalOpen && (
+        <OpportunityFormModal
+          isOpen={isLeadModalOpen}
+          onClose={() => setIsLeadModalOpen(false)}
+          leadToEdit={editingLead}
+          services={services}
+          responsibles={responsibles}
+          onSaved={() => {
+            setIsLeadModalOpen(false);
+            loadData();
+          }}
+        />
+      )}
+
+      {/* MODAL: CONVERTER PROPOSTA EM VENDA */}
+      {convertingLead && (
+        <ConvertLeadModal
+          isOpen={!!convertingLead}
+          onClose={() => setConvertingLead(null)}
+          lead={convertingLead}
+          services={services}
+          onConverted={() => {
+            setConvertingLead(null);
+            loadData();
+            setActiveTab('sales');
           }}
         />
       )}
@@ -1627,6 +1948,470 @@ function ExpenseFormModal({
             >
               {saving && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
               <span>{expenseToEdit ? 'SALVAR ALTERAÇÕES' : 'REGISTRAR DESPESA'}</span>
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// -------------------------------------------------------------
+// Subcomponent: Modal Form de Proposta / Oportunidade
+// -------------------------------------------------------------
+interface OpportunityFormModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  leadToEdit: CrmLead | null;
+  services: FinanceServiceOption[];
+  responsibles: FinanceResponsibleOption[];
+  onSaved: () => void;
+}
+
+function OpportunityFormModal({
+  onClose,
+  leadToEdit,
+  services,
+  responsibles,
+  onSaved,
+}: OpportunityFormModalProps) {
+  const [company, setCompany] = useState(leadToEdit?.company || '');
+  const [name, setName] = useState(leadToEdit?.name || '');
+  const [phone, setPhone] = useState(leadToEdit?.phone || '');
+  const [email, setEmail] = useState(leadToEdit?.email || '');
+  const [serviceInterest, setServiceInterest] = useState(leadToEdit?.service_interest || services[0]?.name || 'Paid Media (Tráfego Pago)');
+  const [estimatedValue, setEstimatedValue] = useState<string>(leadToEdit ? String(leadToEdit.estimated_value) : '');
+  const [status, setStatus] = useState<LeadStage>(leadToEdit?.status || 'PROPOSTA');
+  const [assignedTo, setAssignedTo] = useState(leadToEdit?.assigned_to || responsibles[0]?.id || 'felipe');
+  const [source, setSource] = useState(leadToEdit?.source || 'WhatsApp');
+  const [nextFollowUp, setNextFollowUp] = useState(leadToEdit?.next_follow_up || '');
+  const [notes, setNotes] = useState(leadToEdit?.notes || '');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!company.trim()) {
+      setError('Informe o nome da empresa ou cliente.');
+      return;
+    }
+    if (!name.trim()) {
+      setError('Informe o nome do contato principal.');
+      return;
+    }
+    const numValue = parseFloat(estimatedValue);
+    if (isNaN(numValue) || numValue < 0) {
+      setError('Informe um valor válido de proposta.');
+      return;
+    }
+
+    setSaving(true);
+    setError(null);
+
+    try {
+      if (leadToEdit) {
+        const res = await updateCrmLead(leadToEdit.id, {
+          company: company.trim(),
+          name: name.trim(),
+          phone: phone.trim() || null,
+          email: email.trim() || null,
+          service_interest: serviceInterest,
+          estimated_value: numValue,
+          status,
+          assigned_to: assignedTo,
+          source,
+          next_follow_up: nextFollowUp || null,
+          notes: notes.trim() || null,
+        });
+        if (res.error) {
+          setError(res.error);
+        } else {
+          onSaved();
+        }
+      } else {
+        const res = await createCrmLead({
+          company: company.trim(),
+          name: name.trim(),
+          phone: phone.trim() || null,
+          email: email.trim() || null,
+          service_interest: serviceInterest,
+          estimated_value: numValue,
+          assigned_to: assignedTo,
+          source,
+          next_follow_up: nextFollowUp || null,
+          notes: notes.trim() || null,
+        });
+        if (res.error) {
+          setError(res.error);
+        } else {
+          // If stage was something other than LEADS, update stage
+          if (res.data && status !== 'LEADS') {
+            await updateLeadStage(res.data.id, status, company);
+          }
+          onSaved();
+        }
+      }
+    } catch (err: any) {
+      setError('Falha ao registrar oportunidade.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4 overflow-y-auto">
+      <div className="bg-[#121212] border border-white/10 p-6 max-w-lg w-full my-8 space-y-4">
+        <div className="flex items-center justify-between border-b border-white/10 pb-3">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-mono text-[#C6FF00] font-bold">
+              // {leadToEdit ? 'EDITAR OPORTUNIDADE' : 'NOVA OPORTUNIDADE COMERCIAL'}
+            </span>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-1 text-white/40 hover:text-white transition-colors cursor-pointer"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {error && (
+          <div className="p-2.5 bg-red-500/10 border border-red-500/30 text-xs font-mono text-red-400">
+            {error}
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit} className="space-y-4 font-mono text-xs">
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-white/50 mb-1">EMPRESA / PROJETO *</label>
+              <input
+                type="text"
+                required
+                placeholder="Ex: Studio Alpha, Grupo Beta"
+                value={company}
+                onChange={(e) => setCompany(e.target.value)}
+                className="w-full bg-[#181818] border border-white/10 px-3 py-2 text-white placeholder-white/30 focus:border-[#C6FF00] focus:outline-none"
+              />
+            </div>
+            <div>
+              <label className="block text-white/50 mb-1">NOME DO CONTATO *</label>
+              <input
+                type="text"
+                required
+                placeholder="Ex: Carlos Silva"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                className="w-full bg-[#181818] border border-white/10 px-3 py-2 text-white placeholder-white/30 focus:border-[#C6FF00] focus:outline-none"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-white/50 mb-1">TELEFONE / WHATSAPP</label>
+              <input
+                type="text"
+                placeholder="(11) 99999-9999"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                className="w-full bg-[#181818] border border-white/10 px-3 py-2 text-white placeholder-white/30 focus:border-[#C6FF00] focus:outline-none"
+              />
+            </div>
+            <div>
+              <label className="block text-white/50 mb-1">E-MAIL</label>
+              <input
+                type="email"
+                placeholder="contato@empresa.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="w-full bg-[#181818] border border-white/10 px-3 py-2 text-white placeholder-white/30 focus:border-[#C6FF00] focus:outline-none"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-white/50 mb-1">SERVIÇO DE INTERESSE</label>
+              <input
+                type="text"
+                placeholder="Ex: Tráfego Pago, Site, Vulto Tap"
+                value={serviceInterest}
+                onChange={(e) => setServiceInterest(e.target.value)}
+                className="w-full bg-[#181818] border border-white/10 px-3 py-2 text-white focus:border-[#C6FF00] focus:outline-none"
+              />
+            </div>
+            <div>
+              <label className="block text-white/50 mb-1">VALOR PROPOSTA (R$) *</label>
+              <input
+                type="number"
+                step="0.01"
+                required
+                placeholder="0.00"
+                value={estimatedValue}
+                onChange={(e) => setEstimatedValue(e.target.value)}
+                className="w-full bg-[#181818] border border-white/10 px-3 py-2 text-white placeholder-white/30 font-bold focus:border-[#C6FF00] focus:outline-none"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-white/50 mb-1">ETAPA COMERCIAL</label>
+              <select
+                value={status}
+                onChange={(e) => setStatus(e.target.value as LeadStage)}
+                className="w-full bg-[#181818] border border-white/10 px-3 py-2 text-white focus:border-[#C6FF00] focus:outline-none"
+              >
+                <option value="PROPOSTA">PROPOSTA</option>
+                <option value="NEGOCIACAO">NEGOCIAÇÃO</option>
+                <option value="CONTATO">CONTATO</option>
+                <option value="LEADS">LEAD</option>
+                <option value="FECHADOS">FECHADO</option>
+                <option value="PERDIDOS">PERDIDO</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-white/50 mb-1">RESPONSÁVEL</label>
+              <select
+                value={assignedTo}
+                onChange={(e) => setAssignedTo(e.target.value)}
+                className="w-full bg-[#181818] border border-white/10 px-3 py-2 text-white focus:border-[#C6FF00] focus:outline-none"
+              >
+                {responsibles.map((r) => (
+                  <option key={r.id} value={r.id}>
+                    {r.full_name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-white/50 mb-1">ORIGEM / CANAL</label>
+              <select
+                value={source}
+                onChange={(e) => setSource(e.target.value)}
+                className="w-full bg-[#181818] border border-white/10 px-3 py-2 text-white focus:border-[#C6FF00] focus:outline-none"
+              >
+                <option value="WhatsApp">WhatsApp</option>
+                <option value="Instagram">Instagram</option>
+                <option value="Indicação">Indicação</option>
+                <option value="Site">Site</option>
+                <option value="Prospecção presencial">Prospecção presencial</option>
+                <option value="Google">Google</option>
+                <option value="Outro">Outro</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-white/50 mb-1">PRÓXIMO CONTATO (FOLLOW-UP)</label>
+              <input
+                type="date"
+                value={nextFollowUp}
+                onChange={(e) => setNextFollowUp(e.target.value)}
+                className="w-full bg-[#181818] border border-white/10 px-3 py-2 text-white focus:border-[#C6FF00] focus:outline-none"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-white/50 mb-1">NOTAS / OBSERVAÇÕES DA PROPOSTA</label>
+            <textarea
+              rows={2}
+              placeholder="Ex: Aguardando aprovação orçamentária do sócio diretor até quinta..."
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              className="w-full bg-[#181818] border border-white/10 px-3 py-2 text-white placeholder-white/30 focus:border-[#C6FF00] focus:outline-none"
+            />
+          </div>
+
+          <div className="flex items-center justify-end gap-3 pt-3 border-t border-white/10">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 bg-[#1C1C1C] hover:bg-[#252525] border border-white/10 text-white/70 transition-colors cursor-pointer"
+            >
+              CANCELAR
+            </button>
+            <button
+              type="submit"
+              disabled={saving}
+              className="px-5 py-2 bg-[#C6FF00] hover:bg-[#b0e600] text-[#0A0A0A] font-bold tracking-wider transition-colors cursor-pointer flex items-center gap-2"
+            >
+              {saving && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
+              <span>{leadToEdit ? 'SALVAR ALTERAÇÕES' : 'CRIAR PROPOSTA'}</span>
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// -------------------------------------------------------------
+// Subcomponent: Modal de Conversão de Proposta em Venda
+// -------------------------------------------------------------
+interface ConvertLeadModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  lead: CrmLead;
+  services: FinanceServiceOption[];
+  onConverted: () => void;
+}
+
+function ConvertLeadModal({
+  onClose,
+  lead,
+  services,
+  onConverted,
+}: ConvertLeadModalProps) {
+  const [finalValue, setFinalValue] = useState<string>(String(lead.estimated_value || 0));
+  const [service, setService] = useState(lead.service_interest || services[0]?.name || 'Serviço Fechado');
+  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+  const [createClient, setCreateClient] = useState(true);
+  const [createSale, setCreateSale] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleConvert = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const numValue = parseFloat(finalValue);
+    if (isNaN(numValue) || numValue <= 0) {
+      setError('Informe o valor final fechado do negócio.');
+      return;
+    }
+
+    setSaving(true);
+    setError(null);
+
+    try {
+      const res = await convertLeadToClientAndSale({
+        leadId: lead.id,
+        leadCompany: lead.company,
+        leadContact: lead.name,
+        leadEmail: lead.email,
+        leadPhone: lead.phone,
+        finalValue: numValue,
+        service,
+        date,
+        createClient,
+        createSale,
+      });
+
+      if (res.success) {
+        onConverted();
+      } else {
+        setError(res.error || 'Falha na conversão.');
+      }
+    } catch (err: any) {
+      setError('Erro inesperado durante a conversão.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4">
+      <div className="bg-[#121212] border border-[#C6FF00]/40 p-6 max-w-md w-full space-y-4">
+        <div className="flex items-center justify-between border-b border-white/10 pb-3">
+          <div className="flex items-center gap-2">
+            <DollarSign className="w-4 h-4 text-[#C6FF00]" />
+            <span className="text-xs font-mono text-[#C6FF00] font-bold">
+              // FECHAMENTO & CONVERSÃO EM VENDA
+            </span>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-1 text-white/40 hover:text-white transition-colors cursor-pointer"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <div className="p-3 bg-[#181818] border border-white/10 text-xs font-mono space-y-1">
+          <div className="text-white font-bold">{lead.company}</div>
+          <div className="text-white/60">Contato: {lead.name}</div>
+        </div>
+
+        {error && (
+          <div className="p-2.5 bg-red-500/10 border border-red-500/30 text-xs font-mono text-red-400">
+            {error}
+          </div>
+        )}
+
+        <form onSubmit={handleConvert} className="space-y-4 font-mono text-xs">
+          <div>
+            <label className="block text-white/50 mb-1">VALOR FINAL FECHADO (R$) *</label>
+            <input
+              type="number"
+              step="0.01"
+              required
+              value={finalValue}
+              onChange={(e) => setFinalValue(e.target.value)}
+              className="w-full bg-[#181818] border border-white/10 px-3 py-2 text-white font-bold text-sm focus:border-[#C6FF00] focus:outline-none"
+            />
+          </div>
+
+          <div>
+            <label className="block text-white/50 mb-1">SERVIÇO CONTRATADO *</label>
+            <input
+              type="text"
+              required
+              value={service}
+              onChange={(e) => setService(e.target.value)}
+              className="w-full bg-[#181818] border border-white/10 px-3 py-2 text-white focus:border-[#C6FF00] focus:outline-none"
+            />
+          </div>
+
+          <div>
+            <label className="block text-white/50 mb-1">DATA DA VENDA / LIQUIDAÇÃO *</label>
+            <input
+              type="date"
+              required
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+              className="w-full bg-[#181818] border border-white/10 px-3 py-2 text-white focus:border-[#C6FF00] focus:outline-none"
+            />
+          </div>
+
+          <div className="space-y-2 pt-2 border-t border-white/10">
+            <label className="flex items-center gap-2 text-white cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={createClient}
+                onChange={(e) => setCreateClient(e.target.checked)}
+                className="rounded accent-[#C6FF00]"
+              />
+              <span>Criar / vincular à carteira de Clientes</span>
+            </label>
+
+            <label className="flex items-center gap-2 text-white cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={createSale}
+                onChange={(e) => setCreateSale(e.target.checked)}
+                className="rounded accent-[#C6FF00]"
+              />
+              <span>Lançar como entrada no Caixa (Venda Paga)</span>
+            </label>
+          </div>
+
+          <div className="flex items-center justify-end gap-3 pt-3 border-t border-white/10">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 bg-[#1C1C1C] hover:bg-[#252525] border border-white/10 text-white/70 transition-colors cursor-pointer"
+            >
+              CANCELAR
+            </button>
+            <button
+              type="submit"
+              disabled={saving}
+              className="px-5 py-2 bg-[#C6FF00] hover:bg-[#b0e600] text-[#0A0A0A] font-bold tracking-wider transition-colors cursor-pointer flex items-center gap-2"
+            >
+              {saving && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
+              <span>CONFIRMAR & LANÇAR NO CAIXA</span>
             </button>
           </div>
         </form>
