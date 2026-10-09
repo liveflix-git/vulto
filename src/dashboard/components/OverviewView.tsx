@@ -42,6 +42,14 @@ export function OverviewView({
 }: OverviewViewProps) {
   const currentPartner = PARTNERS[currentUser] || PARTNERS.felipe;
   const { data, loading, refreshing, refetch } = useDashboardData();
+
+  React.useEffect(() => {
+    const handleGlobalRefresh = () => {
+      refetch();
+    };
+    window.addEventListener('vulto:refresh', handleGlobalRefresh);
+    return () => window.removeEventListener('vulto:refresh', handleGlobalRefresh);
+  }, [refetch]);
   const [hoveredChartDay, setHoveredChartDay] = useState<{
     day: number;
     dateStr: string;

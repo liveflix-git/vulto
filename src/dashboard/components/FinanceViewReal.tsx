@@ -139,6 +139,14 @@ export function FinanceViewReal() {
     loadData();
   }, [loadData]);
 
+  useEffect(() => {
+    const handleGlobalRefresh = () => {
+      handleRefresh();
+    };
+    window.addEventListener('vulto:refresh', handleGlobalRefresh);
+    return () => window.removeEventListener('vulto:refresh', handleGlobalRefresh);
+  }, [handleRefresh]);
+
   const handleRefresh = () => {
     setRefreshing(true);
     loadData();

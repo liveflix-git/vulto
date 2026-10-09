@@ -13,7 +13,7 @@ import {
   CheckSquare,
   Square,
   Trash2,
-  Edit3,
+  Edit2,
   X,
   Search,
   Filter,
@@ -23,6 +23,8 @@ import {
   Flame,
   ArrowRight,
   TrendingUp,
+  AlertCircle,
+  Check,
 } from 'lucide-react';
 import {
   ProjectItem,
@@ -70,6 +72,7 @@ export function ProjectsViewReal() {
   const [profiles, setProfiles] = useState<ProfileUser[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
+  const [refreshStatus, setRefreshStatus] = useState<'idle' | 'updating' | 'success' | 'error'>('idle');
 
   // Filters & Search
   const [searchTerm, setSearchTerm] = useState<string>('');
@@ -80,18 +83,37 @@ export function ProjectsViewReal() {
 
   // Modals & Selection
   const [isNewProjectModalOpen, setIsNewProjectModalOpen] = useState<boolean>(false);
+  const [editingProject, setEditingProject] = useState<ProjectItem | null>(null);
   const [selectedProject, setSelectedProject] = useState<ProjectItem | null>(null);
+
+  // Delete Project Confirmation Modal
+  const [projectToDelete, setProjectToDelete] = useState<ProjectItem | null>(null);
+  const [isDeletingProject, setIsDeletingProject] = useState(false);
 
   // Quick task input in detail drawer
   const [newQuickTaskTitle, setNewQuickTaskTitle] = useState<string>('');
   const [isAddingTask, setIsAddingTask] = useState<boolean>(false);
 
+  // Toast feedback
+  const [toastMessage, setToastMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  const showToast = (text: string, type: 'success' | 'error' = 'success') => {
+    setToastMessage({ type, text });
+    setTimeout(() => {
+      setToastMessage(null);
+    }, 3500);
+  };
+
   // -------------------------------------------------------------
   // CARREGAR DADOS
   // -------------------------------------------------------------
   const loadData = useCallback(async (showRefreshing = false) => {
-    if (showRefreshing) setIsRefreshing(true);
-    else setIsLoading(true);
+    if (showRefreshing) {
+      setIsRefreshing(true);
+      setRefreshStatus('updating');
+    } else {
+      setIsLoading(true);
+    }
 
     try {
       const [projectsData, clientsData, servicesData, profilesData] = await Promise.all([
@@ -105,16 +127,34 @@ export function ProjectsViewReal() {
       setClients(clientsData);
       setServices(servicesData);
       setProfiles(profilesData);
+
+      if (showRefreshing) {
+        setRefreshStatus('success');
+        setTimeout(() => setRefreshStatus('idle'), 2000);
+      }
     } catch (err) {
       console.error('Erro ao carregar módulo de projetos:', err);
+      if (showRefreshing) {
+        setRefreshStatus('error');
+        showToast('Não foi possível atualizar os dados.', 'error');
+        setTimeout(() => setRefreshStatus('idle'), 3000);
+      }
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
     }
   }, []);
 
-  useEffect(() => {
+useEffect(() => {
     loadData();
+  }, [loadData]);
+
+  useEffect(() => {
+    const handleGlobalRefresh = () => {
+      loadData(true);
+    };
+    window.addEventListener('vulto:refresh', handleGlobalRefresh);
+    return () => window.removeEventListener('vulto:refresh', handleGlobalRefresh);
   }, [loadData]);
 
   // Keep selectedProject in sync when projects change
@@ -138,11 +178,8 @@ export function ProjectsViewReal() {
         const query = searchTerm.toLowerCase();
         const matchesName = p.name.toLowerCase().includes(query);
         const matchesClient = (p.client_name || '').toLowerCase().includes(query);
-        const matchesService = (p.service_name || '').toLowerCase().includes(query);
-        const matchesResp = (p.responsible_name || '').toLowerCase().includes(query);
-        if (!matchesName && !matchesClient && !matchesService && !matchesResp) {
-          return false;
-        }
+        const matchesDesc = (p.description || '').toLowerCase().includes(query);
+        if (!matchesName && !matchesClient && !matchesDesc) return false;
       }
 
       // Status
@@ -162,9 +199,9 @@ export function ProjectsViewReal() {
 
       // Responsible
       if (responsibleFilter !== 'ALL') {
-        if (p.responsible_user_id !== responsibleFilter && p.responsible_name !== responsibleFilter) {
-          return false;
-        }
+        const respLower = (p.responsible_name || '').toLowerCase();
+        if (responsibleFilter === 'felipe' && !respLower.includes('felipe')) return false;
+        if (responsibleFilter === 'pietro' && !respLower.includes('pietro')) return false;
       }
 
       return true;
@@ -175,12 +212,14 @@ export function ProjectsViewReal() {
   // HANDLERS: TASKS
   // -------------------------------------------------------------
   const handleToggleTask = async (projectId: string, taskId: string, currentCompleted: boolean) => {
-    // Optimistic toggle
+    const newCompleted = !currentCompleted;
+
+    // Optimistic update
     setProjects((prev) =>
       prev.map((proj) => {
         if (proj.id !== projectId) return proj;
         const updatedTasks = proj.tasks.map((t) =>
-          t.id === taskId ? { ...t, completed: !currentCompleted } : t
+          t.id === taskId ? { ...t, completed: newCompleted } : t
         );
         const compCount = updatedTasks.filter((t) => t.completed).length;
         const totCount = updatedTasks.length;
@@ -194,10 +233,10 @@ export function ProjectsViewReal() {
       })
     );
 
-    await toggleTaskCompletion(taskId, currentCompleted);
+    await toggleTaskCompletion(taskId, newCompleted);
   };
 
-  const handleAddNewTaskToProject = async (projectId: string) => {
+  const handleAddQuickTask = async (projectId: string) => {
     if (!newQuickTaskTitle.trim()) return;
     setIsAddingTask(true);
     const title = newQuickTaskTitle.trim();
@@ -220,12 +259,12 @@ export function ProjectsViewReal() {
           };
         })
       );
+      showToast('Etapa adicionada.');
     }
     setIsAddingTask(false);
   };
 
   const handleDeleteTask = async (projectId: string, taskId: string) => {
-    // Optimistic
     setProjects((prev) =>
       prev.map((proj) => {
         if (proj.id !== projectId) return proj;
@@ -242,7 +281,10 @@ export function ProjectsViewReal() {
       })
     );
 
-    await deleteTaskRecord(taskId);
+    const success = await deleteTaskRecord(taskId);
+    if (!success) {
+      showToast('Não foi possível excluir a tarefa.', 'error');
+    }
   };
 
   // -------------------------------------------------------------
@@ -261,36 +303,66 @@ export function ProjectsViewReal() {
           prev ? { ...prev, status: 'CONCLUÍDO', is_delayed: false } : null
         );
       }
+      showToast('Projeto concluído com sucesso!');
+    } else {
+      showToast('Não foi possível atualizar o status.', 'error');
     }
   };
 
-  const handleDeleteProject = async (projectId: string) => {
-    if (!window.confirm('Tem certeza que deseja excluir este projeto e todas as suas tarefas?')) {
-      return;
-    }
-    const success = await deleteProjectRecord(projectId);
-    if (success) {
-      setProjects((prev) => prev.filter((p) => p.id !== projectId));
-      if (selectedProject?.id === projectId) {
-        setSelectedProject(null);
+  const handleConfirmDeleteProject = async () => {
+    if (!projectToDelete) return;
+    setIsDeletingProject(true);
+
+    try {
+      const success = await deleteProjectRecord(projectToDelete.id);
+      if (success) {
+        // Remover imediatamente da interface
+        setProjects((prev) => prev.filter((p) => p.id !== projectToDelete.id));
+        if (selectedProject?.id === projectToDelete.id) {
+          setSelectedProject(null);
+        }
+        showToast('Registro excluído.');
+        setProjectToDelete(null);
+      } else {
+        showToast('Não foi possível excluir o registro.', 'error');
       }
+    } catch (e) {
+      showToast('Não foi possível excluir o registro.', 'error');
+    } finally {
+      setIsDeletingProject(false);
     }
   };
 
   return (
     <div className="space-y-6">
-      {/* ------------------------------------------------------------- */}
+      {/* Toast Notification */}
+      {toastMessage && (
+        <div
+          className={`fixed bottom-6 right-6 z-50 px-4 py-3 border font-mono text-xs flex items-center gap-2 shadow-2xl transition-all duration-300 ${
+            toastMessage.type === 'success'
+              ? 'bg-[#121212] border-[#C6FF00] text-[#C6FF00]'
+              : 'bg-rose-950/90 border-rose-500 text-rose-200'
+          }`}
+        >
+          {toastMessage.type === 'success' ? (
+            <Check className="w-4 h-4 stroke-[2.5]" />
+          ) : (
+            <AlertCircle className="w-4 h-4 text-rose-400" />
+          )}
+          <span className="font-bold tracking-wider">{toastMessage.text}</span>
+        </div>
+      )}
+
       {/* HEADER PRINCIPAL */}
-      {/* ------------------------------------------------------------- */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-[#111111] border border-white/10 p-5">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-[#111111] border border-white/10 p-5">
         <div>
           <div className="flex items-center gap-2 mb-1">
             <span className="text-[10px] font-mono tracking-widest text-[#C6FF00] uppercase">
-              // OPERAÇÃO & DEMANDAS
+              // OPERAÇÃO & SPRINTS
             </span>
             <span className="text-white/20">•</span>
-            <span className="text-[10px] font-mono text-white/50 uppercase">
-              ENTREGAS VULTO LAB
+            <span className="text-[10px] font-mono text-white/50">
+              SUPABASE PROJECTS
             </span>
           </div>
           <h1 className="text-xl sm:text-2xl font-bold font-mono text-white tracking-tight">
@@ -303,20 +375,30 @@ export function ProjectsViewReal() {
 
         {/* Top Actions */}
         <div className="flex flex-wrap items-center gap-2.5">
-          {/* Refresh button */}
+          {/* Refresh button com feedback visual */}
           <button
             onClick={() => loadData(true)}
             disabled={isRefreshing}
-            className="px-3 py-2 bg-white/5 hover:bg-white/10 text-white/80 hover:text-white border border-white/10 text-xs font-mono flex items-center gap-1.5 transition-colors cursor-pointer"
+            className="px-3.5 py-2.5 bg-[#161616] hover:bg-[#202020] text-white/80 hover:text-white border border-white/10 text-xs font-mono flex items-center gap-2 transition-colors cursor-pointer disabled:opacity-50"
+            title="Recarregar projetos do Supabase"
           >
-            <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin text-[#C6FF00]' : ''}`} />
-            <span className="hidden sm:inline">Atualizar</span>
+            <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin text-[#C6FF00]' : 'text-white/60'}`} />
+            <span>
+              {refreshStatus === 'updating'
+                ? 'ATUALIZANDO...'
+                : refreshStatus === 'success'
+                ? 'ATUALIZADO'
+                : 'ATUALIZAR'}
+            </span>
           </button>
 
           {/* New Project Button */}
           <button
-            onClick={() => setIsNewProjectModalOpen(true)}
-            className="px-4 py-2 bg-[#C6FF00] hover:bg-[#b0e600] text-[#0A0A0A] font-mono font-bold text-xs tracking-wider flex items-center gap-2 transition-colors cursor-pointer shadow-sm"
+            onClick={() => {
+              setEditingProject(null);
+              setIsNewProjectModalOpen(true);
+            }}
+            className="px-4 py-2.5 bg-[#C6FF00] hover:bg-[#b0e600] text-[#0A0A0A] font-mono font-bold text-xs tracking-wider flex items-center gap-2 transition-colors cursor-pointer shadow-sm"
           >
             <Plus className="w-4 h-4 stroke-[2.5]" />
             <span>NOVO PROJETO</span>
@@ -324,9 +406,7 @@ export function ProjectsViewReal() {
         </div>
       </div>
 
-      {/* ------------------------------------------------------------- */}
       {/* CARDS DE RESUMO OPERACIONAL */}
-      {/* ------------------------------------------------------------- */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
         {/* Total Projetos */}
         <div className="bg-[#111111] border border-white/10 p-3.5">
@@ -335,348 +415,292 @@ export function ProjectsViewReal() {
           <div className="text-[10px] font-mono text-white/50 mt-1">Todas as demandas</div>
         </div>
 
-        {/* Em Execução */}
+        {/* Em Andamento */}
         <div className="bg-[#111111] border border-white/10 p-3.5">
-          <div className="text-[10px] font-mono text-amber-400/80 uppercase mb-1">Em Execução</div>
-          <div className="text-xl font-bold font-mono text-amber-400">{metrics.inProgressCount}</div>
-          <div className="text-[10px] font-mono text-white/50 mt-1">Sprints ativas</div>
-        </div>
-
-        {/* Atrasados Alerta */}
-        <div
-          className={`p-3.5 border transition-all ${
-            metrics.delayedCount > 0
-              ? 'bg-rose-950/20 border-rose-600/50 text-rose-300'
-              : 'bg-[#111111] border-white/10 text-white'
-          }`}
-        >
-          <div className="flex items-center justify-between text-[10px] font-mono uppercase mb-1">
-            <span className={metrics.delayedCount > 0 ? 'text-rose-400 font-bold' : 'text-white/40'}>
-              Atrasados
-            </span>
-            {metrics.delayedCount > 0 && <AlertTriangle className="w-3.5 h-3.5 text-rose-400 animate-pulse" />}
-          </div>
-          <div className={`text-xl font-bold font-mono ${metrics.delayedCount > 0 ? 'text-rose-400' : ''}`}>
-            {metrics.delayedCount}
-          </div>
-          <div className="text-[10px] font-mono text-white/50 mt-1">
-            {metrics.delayedCount > 0 ? 'Exigem ação imediata' : 'Nenhum atraso'}
-          </div>
+          <div className="text-[10px] font-mono text-white/40 uppercase mb-1">Em Execução</div>
+          <div className="text-xl font-bold font-mono text-amber-400">{metrics.activeProjects}</div>
+          <div className="text-[10px] font-mono text-amber-400/80 mt-1">Sprints ativas</div>
         </div>
 
         {/* Concluídos */}
         <div className="bg-[#111111] border border-white/10 p-3.5">
-          <div className="text-[10px] font-mono text-[#C6FF00]/80 uppercase mb-1">Concluídos</div>
-          <div className="text-xl font-bold font-mono text-[#C6FF00]">{metrics.completedCount}</div>
-          <div className="text-[10px] font-mono text-white/50 mt-1">Entregas finalizadas</div>
+          <div className="text-[10px] font-mono text-white/40 uppercase mb-1">Concluídos</div>
+          <div className="text-xl font-bold font-mono text-emerald-400">{metrics.completedProjects}</div>
+          <div className="text-[10px] font-mono text-emerald-400/80 mt-1">{metrics.completionRate}% de taxa</div>
         </div>
 
-        {/* Valor em Execução */}
+        {/* Atrasados */}
         <div className="bg-[#111111] border border-white/10 p-3.5">
-          <div className="text-[10px] font-mono text-white/40 uppercase mb-1">Pipeline Valor</div>
-          <div className="text-xl font-bold font-mono text-white">
-            {formatProjectCurrency(metrics.totalPipelineValue)}
+          <div className="text-[10px] font-mono text-white/40 uppercase mb-1 flex items-center justify-between">
+            <span>Atrasados</span>
+            {metrics.delayedProjects > 0 && <Flame className="w-3 h-3 text-rose-500 animate-pulse" />}
           </div>
-          <div className="text-[10px] font-mono text-white/50 mt-1">Em produção ativa</div>
+          <div className={`text-xl font-bold font-mono ${metrics.delayedProjects > 0 ? 'text-rose-400' : 'text-white/60'}`}>
+            {metrics.delayedProjects}
+          </div>
+          <div className="text-[10px] font-mono text-white/50 mt-1">Requerem atenção</div>
         </div>
 
-        {/* Tarefas Entregues */}
-        <div className="bg-[#111111] border border-white/10 p-3.5">
-          <div className="text-[10px] font-mono text-white/40 uppercase mb-1">Taxa de Tarefas</div>
-          <div className="text-xl font-bold font-mono text-white">
-            {metrics.totalTasksCount > 0
-              ? `${Math.round((metrics.completedTasksCount / metrics.totalTasksCount) * 100)}%`
-              : '0%'}
+        {/* Valor em Contrato */}
+        <div className="bg-[#111111] border border-white/10 p-3.5 col-span-2 sm:col-span-1 lg:col-span-2">
+          <div className="text-[10px] font-mono text-white/40 uppercase mb-1">Valor Contratado em Sprints</div>
+          <div className="text-xl font-bold font-mono text-[#C6FF00]">
+            {formatProjectCurrency(metrics.totalContractValue)}
           </div>
-          <div className="text-[10px] font-mono text-white/50 mt-1">
-            {metrics.completedTasksCount}/{metrics.totalTasksCount} etapas
-          </div>
+          <div className="text-[10px] font-mono text-white/50 mt-1">Pipeline sob entrega técnica</div>
         </div>
       </div>
 
-      {/* ------------------------------------------------------------- */}
-      {/* BARRA DE FILTROS & BUSCA */}
-      {/* ------------------------------------------------------------- */}
-      <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 bg-[#111111] border border-white/10 p-3">
-        {/* Search input */}
-        <div className="relative flex-1">
-          <Search className="w-4 h-4 text-white/40 absolute left-3 top-1/2 -translate-y-1/2" />
-          <input
-            type="text"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="Buscar por projeto, cliente, serviço ou responsável..."
-            className="w-full bg-[#161616] border border-white/10 pl-9 pr-4 py-2 text-xs font-mono text-white placeholder-white/40 focus:outline-none focus:border-[#C6FF00]"
-          />
-          {searchTerm && (
-            <button
-              onClick={() => setSearchTerm('')}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-white/40 hover:text-white"
-            >
-              <X className="w-3.5 h-3.5" />
-            </button>
-          )}
-        </div>
-
-        {/* Quick Filters */}
-        <div className="flex flex-wrap items-center gap-2">
-          {/* Priority filter */}
-          <div className="flex items-center gap-1.5 bg-[#161616] border border-white/10 px-2.5 py-1.5">
-            <span className="text-[10px] font-mono text-white/40">Prioridade:</span>
-            <select
-              value={priorityFilter}
-              onChange={(e) => setPriorityFilter(e.target.value)}
-              className="bg-transparent text-xs font-mono text-white focus:outline-none cursor-pointer"
-            >
-              <option value="ALL" className="bg-[#161616]">Todas</option>
-              <option value="Baixa" className="bg-[#161616]">Baixa</option>
-              <option value="Normal" className="bg-[#161616]">Normal</option>
-              <option value="Alta" className="bg-[#161616]">Alta</option>
-              <option value="Urgente" className="bg-[#161616]">Urgente</option>
-            </select>
+      {/* FILTROS E BUSCA */}
+      <div className="bg-[#111111] border border-white/10 p-4 space-y-3">
+        <div className="flex flex-col md:flex-row gap-3 items-stretch md:items-center justify-between">
+          {/* Search Box */}
+          <div className="relative flex-1">
+            <Search className="w-4 h-4 text-white/40 absolute left-3 top-2.5" />
+            <input
+              type="text"
+              placeholder="Buscar por projeto, cliente ou escopo técnico..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full bg-[#161616] border border-white/10 pl-9 pr-3 py-1.5 text-xs text-white placeholder-white/30 font-mono focus:outline-none focus:border-[#C6FF00]"
+            />
           </div>
 
-          {/* Status filter */}
-          <div className="flex items-center gap-1.5 bg-[#161616] border border-white/10 px-2.5 py-1.5">
-            <span className="text-[10px] font-mono text-white/40">Status:</span>
+          {/* Filter Dropdowns */}
+          <div className="flex flex-wrap items-center gap-2 text-xs font-mono">
+            {/* Status */}
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
-              className="bg-transparent text-xs font-mono text-white focus:outline-none cursor-pointer"
+              className="bg-[#161616] border border-white/10 px-2.5 py-1.5 text-white/80 focus:outline-none focus:border-[#C6FF00] cursor-pointer"
             >
-              <option value="ALL" className="bg-[#161616]">Todos</option>
+              <option value="ALL">Status: Todos</option>
               {PROJECT_STAGES.map((st) => (
-                <option key={st} value={st} className="bg-[#161616]">
+                <option key={st} value={st}>
                   {st}
                 </option>
               ))}
             </select>
-          </div>
 
-          {/* Responsible filter */}
-          <div className="flex items-center gap-1.5 bg-[#161616] border border-white/10 px-2.5 py-1.5">
-            <span className="text-[10px] font-mono text-white/40">Líder:</span>
+            {/* Priority */}
+            <select
+              value={priorityFilter}
+              onChange={(e) => setPriorityFilter(e.target.value)}
+              className="bg-[#161616] border border-white/10 px-2.5 py-1.5 text-white/80 focus:outline-none focus:border-[#C6FF00] cursor-pointer"
+            >
+              <option value="ALL">Prioridade: Todas</option>
+              <option value="Baixa">Baixa</option>
+              <option value="Normal">Normal</option>
+              <option value="Alta">Alta</option>
+              <option value="Urgente">Urgente</option>
+            </select>
+
+            {/* Responsible */}
             <select
               value={responsibleFilter}
               onChange={(e) => setResponsibleFilter(e.target.value)}
-              className="bg-transparent text-xs font-mono text-white focus:outline-none cursor-pointer"
+              className="bg-[#161616] border border-white/10 px-2.5 py-1.5 text-white/80 focus:outline-none focus:border-[#C6FF00] cursor-pointer"
             >
-              <option value="ALL" className="bg-[#161616]">Todos</option>
-              <option value="felipe" className="bg-[#161616]">Felipe</option>
-              <option value="pietro" className="bg-[#161616]">Pietro</option>
+              <option value="ALL">Responsável: Todos</option>
+              <option value="felipe">Felipe</option>
+              <option value="pietro">Pietro</option>
             </select>
-          </div>
 
-          {/* Delayed only toggle */}
-          <button
-            onClick={() => setDelayedOnly(!delayedOnly)}
-            className={`px-2.5 py-1.5 text-xs font-mono flex items-center gap-1.5 border transition-colors cursor-pointer ${
-              delayedOnly
-                ? 'bg-rose-950/40 border-rose-600/70 text-rose-300 font-bold'
-                : 'bg-[#161616] border-white/10 text-white/60 hover:text-white'
-            }`}
-          >
-            <AlertTriangle className={`w-3.5 h-3.5 ${delayedOnly ? 'text-rose-400' : 'text-white/40'}`} />
-            <span>Apenas Atrasados</span>
-          </button>
+            {/* Delayed Checkbox */}
+            <button
+              onClick={() => setDelayedOnly(!delayedOnly)}
+              className={`px-3 py-1.5 border text-xs font-mono flex items-center gap-1.5 transition-colors cursor-pointer ${
+                delayedOnly
+                  ? 'bg-rose-950/60 border-rose-500/80 text-rose-300 font-bold'
+                  : 'bg-[#161616] border-white/10 text-white/60 hover:text-white'
+              }`}
+            >
+              <Clock className="w-3.5 h-3.5" />
+              <span>Apenas Atrasados</span>
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* ------------------------------------------------------------- */}
-      {/* VISUALIZAÇÃO: LISTA DE PROJETOS */}
-      {/* ------------------------------------------------------------- */}
+      {/* TABELA PRINCIPAL DE PROJETOS */}
       <div className="bg-[#111111] border border-white/10 overflow-hidden">
         <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs font-mono">
-              <thead>
-                <tr className="border-b border-white/10 bg-[#0E0E0E] text-[10px] text-white/40 uppercase tracking-wider">
-                  <th className="py-3 px-4">Projeto</th>
-                  <th className="py-3 px-4">Cliente</th>
-                  <th className="py-3 px-4">Serviço</th>
-                  <th className="py-3 px-4">Líder</th>
-                  <th className="py-3 px-4">Status</th>
-                  <th className="py-3 px-4">Prioridade</th>
-                  <th className="py-3 px-4">Prazo / Entrega</th>
-                  <th className="py-3 px-4">Tarefas</th>
-                  <th className="py-3 px-4 text-right">Valor</th>
-                  <th className="py-3 px-4 text-right">Ações</th>
+          <table className="w-full text-left text-xs font-mono border-collapse">
+            <thead>
+              <tr className="border-b border-white/10 bg-[#0E0E0E] text-white/50 text-[10px] uppercase tracking-wider">
+                <th className="py-3 px-4 font-bold">Projeto / Demanda</th>
+                <th className="py-3 px-4 font-bold">Cliente</th>
+                <th className="py-3 px-4 font-bold">Serviço</th>
+                <th className="py-3 px-4 font-bold">Responsável</th>
+                <th className="py-3 px-4 font-bold text-center">Status</th>
+                <th className="py-3 px-4 font-bold text-center">Prioridade</th>
+                <th className="py-3 px-4 font-bold">Prazo (Deadline)</th>
+                <th className="py-3 px-4 font-bold text-center">Progresso</th>
+                <th className="py-3 px-4 font-bold text-right">Valor</th>
+                <th className="py-3 px-4 font-bold text-right">Ações</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-white/5">
+              {isLoading ? (
+                <tr>
+                  <td colSpan={10} className="py-12 text-center text-white/40">
+                    <RefreshCw className="w-5 h-5 animate-spin mx-auto mb-2 text-[#C6FF00]" />
+                    Carregando entregas do Supabase...
+                  </td>
                 </tr>
-              </thead>
-              <tbody className="divide-y divide-white/5">
-                {filteredProjects.length === 0 ? (
-                  <tr>
-                    <td colSpan={10} className="py-12 text-center text-white/40 font-mono text-xs">
-                      Nenhum projeto encontrado com os filtros selecionados.
-                    </td>
-                  </tr>
-                ) : (
-                  filteredProjects.map((proj) => {
-                    const statusConf = PROJECT_STATUS_CONFIG[proj.status];
-                    const priorityConf = PROJECT_PRIORITY_CONFIG[proj.priority];
+              ) : filteredProjects.length === 0 ? (
+                <tr>
+                  <td colSpan={10} className="py-12 text-center text-white/40">
+                    Nenhum projeto encontrado para os filtros selecionados.
+                  </td>
+                </tr>
+              ) : (
+                filteredProjects.map((proj) => {
+                  const statusCfg = PROJECT_STATUS_CONFIG[proj.status] || PROJECT_STATUS_CONFIG['A FAZER'];
+                  const priorityCfg = PROJECT_PRIORITY_CONFIG[proj.priority] || PROJECT_PRIORITY_CONFIG['Normal'];
+                  const daysDelayed = getDaysDelayed(proj.deadline);
 
-                    return (
-                      <tr
-                        key={proj.id}
-                        className="hover:bg-white/[0.02] transition-colors cursor-pointer group"
-                        onClick={() => setSelectedProject(proj)}
-                      >
-                        {/* Nome do Projeto */}
-                        <td className="py-3 px-4">
-                          <div className="font-bold text-white group-hover:text-[#C6FF00] transition-colors flex items-center gap-2">
-                            <span>{proj.name}</span>
-                            {proj.is_delayed && (
-                              <span className="px-1.5 py-0.2 bg-rose-950/80 text-rose-300 border border-rose-600/70 text-[9px] font-bold">
-                                ATRASADO
-                              </span>
-                            )}
+                  return (
+                    <tr
+                      key={proj.id}
+                      className="hover:bg-white/[0.02] transition-colors group cursor-pointer"
+                    >
+                      {/* Nome do Projeto */}
+                      <td className="py-3.5 px-4" onClick={() => setSelectedProject(proj)}>
+                        <div className="font-bold text-white group-hover:text-[#C6FF00] transition-colors">
+                          {proj.name}
+                        </div>
+                        {proj.description && (
+                          <div className="text-[11px] text-white/40 font-sans mt-0.5 line-clamp-1 max-w-xs">
+                            {proj.description}
                           </div>
-                          {proj.description && (
-                            <div className="text-[11px] text-white/50 truncate max-w-xs font-sans mt-0.5">
-                              {proj.description}
-                            </div>
-                          )}
-                        </td>
+                        )}
+                      </td>
 
-                        {/* Cliente */}
-                        <td className="py-3 px-4 text-white/80">
-                          <span className="flex items-center gap-1.5">
-                            <Building className="w-3 h-3 text-white/30" />
-                            {proj.client_name}
+                      {/* Cliente */}
+                      <td className="py-3.5 px-4" onClick={() => setSelectedProject(proj)}>
+                        <span className="text-white/80">{proj.client_name || 'Cliente Geral'}</span>
+                      </td>
+
+                      {/* Serviço */}
+                      <td className="py-3.5 px-4" onClick={() => setSelectedProject(proj)}>
+                        <span className="text-white/60">{proj.service_name || 'Especializado'}</span>
+                      </td>
+
+                      {/* Responsável */}
+                      <td className="py-3.5 px-4" onClick={() => setSelectedProject(proj)}>
+                        <div className="flex items-center gap-1.5">
+                          <div className="w-1.5 h-1.5 rounded-full bg-[#C6FF00]" />
+                          <span className="text-white/80">
+                            {proj.responsible_name
+                              ? proj.responsible_name.toLowerCase().includes('pietro')
+                                ? 'Pietro'
+                                : 'Felipe'
+                              : 'Felipe'}
                           </span>
-                        </td>
+                        </div>
+                      </td>
 
-                        {/* Serviço */}
-                        <td className="py-3 px-4 text-white/70">
-                          <span className="flex items-center gap-1.5">
-                            <Layers className="w-3 h-3 text-[#C6FF00]/50" />
-                            {proj.service_name}
-                          </span>
-                        </td>
+                      {/* Status */}
+                      <td className="py-3.5 px-4 text-center">
+                        <span
+                          className={`inline-block px-2 py-0.5 text-[10px] font-mono uppercase font-bold border ${statusCfg.badgeBg}`}
+                        >
+                          {statusCfg.label}
+                        </span>
+                      </td>
 
-                        {/* Responsável */}
-                        <td className="py-3 px-4 text-white/70">
-                          <span className="flex items-center gap-1.5">
-                            <User className="w-3 h-3 text-white/30" />
-                            {proj.responsible_name ? (proj.responsible_name.toLowerCase().includes('pietro') ? 'Pietro' : 'Felipe') : 'Felipe'}
-                          </span>
-                        </td>
+                      {/* Prioridade */}
+                      <td className="py-3.5 px-4 text-center">
+                        <span
+                          className={`inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-mono ${priorityCfg.badgeClass}`}
+                        >
+                          <span className={`w-1 h-1 rounded-full ${priorityCfg.dotClass}`} />
+                          {priorityCfg.label}
+                        </span>
+                      </td>
 
-                        {/* Status (dropdown rápido) */}
-                        <td className="py-3 px-4" onClick={(e) => e.stopPropagation()}>
-                          <select
-                            value={proj.status}
-                            onChange={async (e) => {
-                              const newSt = e.target.value as ProjectStatus;
-                              await updateProjectStatus(proj.id, newSt);
-                              setProjects((prev) =>
-                                prev.map((p) =>
-                                  p.id === proj.id
-                                    ? {
-                                        ...p,
-                                        status: newSt,
-                                        is_delayed: isProjectDelayed(p.deadline, newSt),
-                                      }
-                                    : p
-                                )
-                              );
-                            }}
-                            className={`px-2 py-1 text-[10px] font-bold border bg-[#161616] cursor-pointer focus:outline-none ${statusConf.badgeBg}`}
-                          >
-                            {PROJECT_STAGES.map((st) => (
-                              <option key={st} value={st} className="bg-[#161616] text-white">
-                                {st}
-                              </option>
-                            ))}
-                          </select>
-                        </td>
-
-                        {/* Prioridade */}
-                        <td className="py-3 px-4">
+                      {/* Prazo */}
+                      <td className="py-3.5 px-4" onClick={() => setSelectedProject(proj)}>
+                        <div className="flex flex-col">
                           <span
-                            className={`inline-flex items-center gap-1.5 px-2 py-0.5 text-[10px] font-bold ${priorityConf.badgeClass}`}
+                            className={
+                              proj.is_delayed
+                                ? 'text-rose-400 font-bold flex items-center gap-1'
+                                : 'text-white/70'
+                            }
                           >
-                            <span className={`w-1.5 h-1.5 rounded-full ${priorityConf.dotClass}`} />
-                            {proj.priority}
+                            {proj.deadline
+                              ? new Date(proj.deadline + 'T00:00:00').toLocaleDateString('pt-BR')
+                              : 'Sem prazo'}
                           </span>
-                        </td>
-
-                        {/* Prazo */}
-                        <td className="py-3 px-4">
-                          <div className="flex items-center gap-1.5">
-                            <Calendar className="w-3.5 h-3.5 text-white/40" />
-                            <span
-                              className={
-                                proj.is_delayed
-                                  ? 'text-rose-400 font-bold'
-                                  : 'text-white/80'
-                              }
-                            >
-                              {proj.deadline
-                                ? new Date(proj.deadline + 'T00:00:00').toLocaleDateString('pt-BR')
-                                : 'Sem data'}
-                            </span>
-                          </div>
                           {proj.is_delayed && (
-                            <div className="text-[10px] text-rose-400/90 font-mono mt-0.5">
-                              {getDaysDelayed(proj.deadline)} dias de atraso
-                            </div>
+                            <span className="text-[10px] text-rose-400/80">
+                              Atrasado há {daysDelayed}d
+                            </span>
                           )}
-                        </td>
+                        </div>
+                      </td>
 
-                        {/* Tarefas */}
-                        <td className="py-3 px-4">
-                          <div className="w-28 space-y-1">
-                            <div className="flex justify-between text-[10px] text-white/60">
-                              <span>
-                                {proj.tasks_completed}/{proj.tasks_total}
-                              </span>
-                              <span className="text-[#C6FF00] font-bold">{proj.progress_percent}%</span>
-                            </div>
-                            <div className="h-1.5 w-full bg-[#1C1C1C] overflow-hidden">
-                              <div
-                                style={{ width: `${proj.progress_percent}%` }}
-                                className="h-full bg-[#C6FF00] transition-all"
-                              />
-                            </div>
+                      {/* Progresso de Tarefas */}
+                      <td className="py-3.5 px-4 text-center" onClick={() => setSelectedProject(proj)}>
+                        <div className="flex flex-col items-center gap-1">
+                          <span className="text-[10px] text-white/50">
+                            {proj.tasks_completed}/{proj.tasks_total} ({proj.progress_percent}%)
+                          </span>
+                          <div className="w-16 h-1.5 bg-[#1C1C1C] overflow-hidden">
+                            <div
+                              style={{ width: `${proj.progress_percent}%` }}
+                              className="h-full bg-[#C6FF00]"
+                            />
                           </div>
-                        </td>
+                        </div>
+                      </td>
 
-                        {/* Valor */}
-                        <td className="py-3 px-4 text-right font-bold text-white">
-                          {formatProjectCurrency(proj.value)}
-                        </td>
+                      {/* Valor */}
+                      <td className="py-3.5 px-4 text-right font-bold text-white" onClick={() => setSelectedProject(proj)}>
+                        {formatProjectCurrency(proj.value || 0)}
+                      </td>
 
-                        {/* Ações */}
-                        <td className="py-3 px-4 text-right" onClick={(e) => e.stopPropagation()}>
-                          <div className="flex items-center justify-end gap-1.5">
-                            <button
-                              onClick={() => setSelectedProject(proj)}
-                              className="p-1.5 bg-white/5 hover:bg-white/10 text-white/70 hover:text-white transition-colors cursor-pointer"
-                              title="Ver detalhes"
-                            >
-                              <ChevronRight className="w-4 h-4" />
-                            </button>
-                            <button
-                              onClick={() => handleDeleteProject(proj.id)}
-                              className="p-1.5 bg-rose-950/20 hover:bg-rose-950/50 text-rose-400 border border-rose-800/30 transition-colors cursor-pointer"
-                              title="Excluir projeto"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
-          </div>
+                      {/* Ações */}
+                      <td className="py-3.5 px-4 text-right">
+                        <div className="flex items-center justify-end gap-1.5">
+                          <button
+                            onClick={() => setSelectedProject(proj)}
+                            className="p-1.5 bg-white/5 hover:bg-white/10 text-white/70 hover:text-white transition-colors cursor-pointer"
+                            title="Ver detalhes"
+                          >
+                            <ChevronRight className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => {
+                              setEditingProject(proj);
+                              setIsNewProjectModalOpen(true);
+                            }}
+                            className="p-1.5 bg-white/5 hover:bg-white/10 text-white/70 hover:text-[#C6FF00] transition-colors cursor-pointer"
+                            title="Editar projeto"
+                          >
+                            <Edit2 className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => setProjectToDelete(proj)}
+                            className="p-1.5 bg-rose-950/20 hover:bg-rose-950/50 text-rose-400 border border-rose-800/30 transition-colors cursor-pointer"
+                            title="Excluir projeto do Supabase"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
         </div>
+      </div>
 
-      {/* ------------------------------------------------------------- */}
-      {/* DRAWER / MODAL: DETALHES DO PROJETO */}
-      {/* ------------------------------------------------------------- */}
+      {/* DRAWER / MODAL LATERAL DE DETALHES DO PROJETO */}
       {selectedProject && (
         <div className="fixed inset-0 z-50 flex items-center justify-end bg-black/80 backdrop-blur-sm p-0 sm:p-4">
           <div className="w-full sm:max-w-2xl h-full sm:h-[95vh] bg-[#111111] border sm:border border-white/10 flex flex-col justify-between overflow-hidden shadow-2xl">
@@ -725,17 +749,29 @@ export function ProjectsViewReal() {
                   <span>•</span>
                   <span className="flex items-center gap-1 text-[#C6FF00] font-bold">
                     <DollarSign className="w-3.5 h-3.5" />
-                    {formatProjectCurrency(selectedProject.value)}
+                    {formatProjectCurrency(selectedProject.value || 0)}
                   </span>
                 </div>
               </div>
 
-              <button
-                onClick={() => setSelectedProject(null)}
-                className="p-1.5 bg-white/5 hover:bg-white/10 text-white/60 hover:text-white transition-colors cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => {
+                    setEditingProject(selectedProject);
+                    setIsNewProjectModalOpen(true);
+                  }}
+                  className="p-1.5 bg-white/5 hover:bg-white/10 text-white/70 hover:text-[#C6FF00] transition-colors cursor-pointer"
+                  title="Editar projeto"
+                >
+                  <Edit2 className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => setSelectedProject(null)}
+                  className="p-1.5 bg-white/5 hover:bg-white/10 text-white/60 hover:text-white transition-colors cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
             </div>
 
             {/* Drawer Body */}
@@ -769,6 +805,7 @@ export function ProjectsViewReal() {
                               }
                             : null
                         );
+                        showToast(`Status alterado para ${st}`);
                       }}
                       className={`p-1.5 text-[10px] text-center font-mono border transition-colors cursor-pointer ${
                         selectedProject.status === st
@@ -841,9 +878,7 @@ export function ProjectsViewReal() {
                 </div>
               )}
 
-              {/* ------------------------------------------------------------- */}
-              {/* LISTA DE TAREFAS / SUB-ENTREGAS */}
-              {/* ------------------------------------------------------------- */}
+              {/* CHECKLIST E ENTREGÁVEIS */}
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
@@ -912,30 +947,30 @@ export function ProjectsViewReal() {
                       onChange={(e) => setNewQuickTaskTitle(e.target.value)}
                       onKeyDown={(e) => {
                         if (e.key === 'Enter') {
-                          handleAddNewTaskToProject(selectedProject.id);
+                          e.preventDefault();
+                          handleAddQuickTask(selectedProject.id);
                         }
                       }}
-                      placeholder="+ Adicionar nova etapa (pressione Enter)..."
-                      className="flex-1 bg-[#161616] border border-white/10 px-3 py-2 text-xs font-mono text-white placeholder-white/40 focus:outline-none focus:border-[#C6FF00]"
+                      placeholder="+ Adicionar etapa no checklist (Enter para salvar)..."
+                      className="flex-1 bg-[#161616] border border-white/10 px-3 py-1.5 text-xs text-white placeholder-white/30 font-mono focus:outline-none focus:border-[#C6FF00]"
                     />
                     <button
-                      onClick={() => handleAddNewTaskToProject(selectedProject.id)}
+                      onClick={() => handleAddQuickTask(selectedProject.id)}
                       disabled={isAddingTask || !newQuickTaskTitle.trim()}
-                      className="px-3 py-2 bg-[#C6FF00] hover:bg-[#b0e600] disabled:opacity-40 text-[#0A0A0A] font-bold text-xs font-mono flex items-center gap-1 transition-colors cursor-pointer"
+                      className="px-3 py-1.5 bg-white/10 hover:bg-white/20 disabled:opacity-40 text-white text-xs font-mono transition-colors cursor-pointer"
                     >
-                      <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
-                      <span>Adicionar</span>
+                      Adicionar
                     </button>
                   </div>
                 </div>
               </div>
             </div>
 
-            {/* Drawer Footer Actions */}
+            {/* Drawer Footer */}
             <div className="p-4 border-t border-white/10 bg-[#0E0E0E] flex flex-wrap items-center justify-between gap-3">
               <div className="flex items-center gap-2">
                 <button
-                  onClick={() => handleDeleteProject(selectedProject.id)}
+                  onClick={() => setProjectToDelete(selectedProject)}
                   className="px-3 py-2 bg-rose-950/30 hover:bg-rose-950/60 text-rose-400 border border-rose-800/40 text-xs font-mono flex items-center gap-1.5 transition-colors cursor-pointer"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
@@ -965,116 +1000,248 @@ export function ProjectsViewReal() {
         </div>
       )}
 
-      {/* ------------------------------------------------------------- */}
-      {/* MODAL: NOVO PROJETO */}
-      {/* ------------------------------------------------------------- */}
+      {/* MODAL: CRIAR / EDITAR PROJETO */}
       {isNewProjectModalOpen && (
         <NewProjectModal
           clients={clients}
           services={services}
           profiles={profiles}
-          onClose={() => setIsNewProjectModalOpen(false)}
+          projectToEdit={editingProject}
+          onClose={() => {
+            setIsNewProjectModalOpen(false);
+            setEditingProject(null);
+          }}
           onCreated={(newProj) => {
             setProjects((prev) => [newProj, ...prev]);
             setIsNewProjectModalOpen(false);
+            setEditingProject(null);
+            showToast('SALVO');
+          }}
+          onUpdated={(updatedProj) => {
+            setProjects((prev) => prev.map((p) => (p.id === updatedProj.id ? updatedProj : p)));
+            if (selectedProject?.id === updatedProj.id) {
+              setSelectedProject(updatedProj);
+            }
+            setIsNewProjectModalOpen(false);
+            setEditingProject(null);
+            showToast('SALVO');
           }}
         />
+      )}
+
+      {/* MODAL DE CONFIRMAÇÃO DE EXCLUSÃO DE PROJETO */}
+      {projectToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm">
+          <div className="bg-[#111111] border border-rose-500/40 w-full max-w-md p-5 space-y-4 shadow-2xl">
+            <div className="flex items-center gap-3 text-rose-400">
+              <AlertCircle className="w-6 h-6 shrink-0" />
+              <h3 className="font-mono text-sm font-bold uppercase tracking-wider text-white">
+                Confirmar Exclusão de Projeto
+              </h3>
+            </div>
+
+            <p className="text-xs font-mono text-white/70 leading-relaxed">
+              Tem certeza que deseja excluir o projeto{' '}
+              <strong className="text-white">"{projectToDelete.name}"</strong> e todas as suas etapas?
+              Esta operação removerá o item permanentemente do Supabase.
+            </p>
+
+            <div className="flex items-center justify-end gap-3 pt-3 border-t border-white/10">
+              <button
+                type="button"
+                onClick={() => setProjectToDelete(null)}
+                disabled={isDeletingProject}
+                className="px-4 py-2 bg-white/5 hover:bg-white/10 text-white/80 font-mono text-xs cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDeleteProject}
+                disabled={isDeletingProject}
+                className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white font-mono font-bold text-xs tracking-wider flex items-center gap-2 cursor-pointer transition-colors"
+              >
+                {isDeletingProject ? (
+                  <>
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    <span>EXCLUINDO...</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>SIM, EXCLUIR</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
 }
 
 // -------------------------------------------------------------
-// MODAL DE CRIAÇÃO DE NOVO PROJETO
+// MODAL DE CRIAÇÃO / EDIÇÃO DE PROJETO
 // -------------------------------------------------------------
 interface NewProjectModalProps {
   clients: ClientEntity[];
   services: ServiceItem[];
   profiles: ProfileUser[];
+  projectToEdit?: ProjectItem | null;
   onClose: () => void;
   onCreated: (proj: ProjectItem) => void;
+  onUpdated: (proj: ProjectItem) => void;
 }
 
 function NewProjectModal({
   clients,
   services,
   profiles,
+  projectToEdit,
   onClose,
   onCreated,
+  onUpdated,
 }: NewProjectModalProps) {
-  const [name, setName] = useState('');
-  const [clientId, setClientId] = useState<string>(clients[0]?.id || '');
-  const [serviceId, setServiceId] = useState<string>(services[0]?.id || '');
-  const [responsibleId, setResponsibleId] = useState<string>(profiles[0]?.id || '');
-  const [description, setDescription] = useState('');
-  const [priority, setPriority] = useState<ProjectPriority>('Normal');
-  const [status, setStatus] = useState<ProjectStatus>('A FAZER');
+  const [name, setName] = useState(projectToEdit?.name || '');
+  const [clientId, setClientId] = useState(projectToEdit?.client_id || '');
+  const [serviceId, setServiceId] = useState(projectToEdit?.service_id || '');
+  const [responsibleId, setResponsibleId] = useState(projectToEdit?.responsible_user_id || 'felipe');
+  const [priority, setPriority] = useState<ProjectPriority>(projectToEdit?.priority || 'Normal');
+  const [status, setStatus] = useState<ProjectStatus>(projectToEdit?.status || 'A FAZER');
   const [deadline, setDeadline] = useState(
-    new Date(Date.now() + 14 * 86400000).toISOString().split('T')[0]
+    projectToEdit?.deadline || new Date(Date.now() + 15 * 86400000).toISOString().split('T')[0]
   );
-  const [value, setValue] = useState<string>('3500');
-  const [notes, setNotes] = useState('');
+  const [value, setValue] = useState(projectToEdit?.value !== undefined ? String(projectToEdit.value) : '3500');
+  const [description, setDescription] = useState(projectToEdit?.description || '');
+  const [notes, setNotes] = useState(projectToEdit?.notes || '');
 
-  // Initial tasks
-  const [taskInputs, setTaskInputs] = useState<string[]>([
-    'Kickoff & alinhamento de escopo',
-    'Desenvolvimento & produção técnica',
-    'Homologação com o parceiro',
-  ]);
+  // Tarefas
+  const [taskInputs, setTaskInputs] = useState<string[]>(
+    projectToEdit ? projectToEdit.tasks.map((t) => t.title) : [
+      'Briefing técnico e alinhamento de escopo',
+      'Execução dos entregáveis e validação interna',
+      'Apresentação e aprovação com o cliente',
+    ]
+  );
   const [newTaskText, setNewTaskText] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  // Auto-fill price based on selected service
   const handleServiceChange = (sId: string) => {
     setServiceId(sId);
-    const matched = services.find((s) => s.id === sId);
-    if (matched && matched.base_price) {
-      setValue(matched.base_price.toString());
+    if (!projectToEdit) {
+      const match = services.find((s) => s.id === sId);
+      if (match?.base_price) {
+        setValue(String(match.base_price));
+      }
     }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim()) return;
+    if (!name.trim()) {
+      setErrorMsg('Informe o nome do projeto.');
+      return;
+    }
 
     setIsSubmitting(true);
-    try {
-      const created = await createProjectRecord({
-        name: name.trim(),
-        client_id: clientId || null,
-        service_id: serviceId || null,
-        responsible_user_id: responsibleId || null,
-        description: description.trim() || null,
-        priority,
-        status,
-        deadline: deadline || null,
-        value: Number(value) || 0,
-        notes: notes.trim() || null,
-        initialTasks: taskInputs.filter((t) => t.trim().length > 0),
-      });
+    setErrorMsg(null);
 
-      if (created) {
-        onCreated(created);
+    try {
+      if (projectToEdit) {
+        // Modo Edição
+        const success = await updateProjectRecord(projectToEdit.id, {
+          name: name.trim(),
+          client_id: clientId || null,
+          service_id: serviceId || null,
+          responsible_user_id: responsibleId || null,
+          description: description.trim() || null,
+          priority,
+          status,
+          deadline: deadline || null,
+          value: Number(value) || 0,
+          notes: notes.trim() || null,
+        });
+
+        if (success) {
+          const clientMatch = clients.find((c) => c.id === clientId);
+          const serviceMatch = services.find((s) => s.id === serviceId);
+          const updatedItem: ProjectItem = {
+            ...projectToEdit,
+            name: name.trim(),
+            client_id: clientId || null,
+            client_name: clientMatch ? clientMatch.company_name : projectToEdit.client_name,
+            service_id: serviceId || null,
+            service_name: serviceMatch ? serviceMatch.name : projectToEdit.service_name,
+            responsible_user_id: responsibleId || null,
+            description: description.trim() || null,
+            priority,
+            status,
+            deadline: deadline || null,
+            value: Number(value) || 0,
+            notes: notes.trim() || null,
+            is_delayed: isProjectDelayed(deadline, status),
+            updated_at: new Date().toISOString(),
+          };
+          onUpdated(updatedItem);
+        } else {
+          setErrorMsg('Não foi possível salvar as alterações no Supabase.');
+        }
+      } else {
+        // Modo Criação
+        const created = await createProjectRecord({
+          name: name.trim(),
+          client_id: clientId || null,
+          service_id: serviceId || null,
+          responsible_user_id: responsibleId || null,
+          description: description.trim() || null,
+          priority,
+          status,
+          deadline: deadline || null,
+          value: Number(value) || 0,
+          notes: notes.trim() || null,
+          initialTasks: taskInputs.filter((t) => t.trim().length > 0),
+        });
+
+        if (created) {
+          onCreated(created);
+        } else {
+          setErrorMsg('Não foi possível cadastrar o projeto no Supabase.');
+        }
       }
-    } catch (err) {
-      console.error('Erro ao criar projeto:', err);
+    } catch (err: any) {
+      console.error('Erro ao salvar projeto:', err);
+      setErrorMsg(err.message || 'Falha ao processar solicitação.');
     } finally {
       setIsSubmitting(false);
     }
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-      <div className="w-full max-w-xl bg-[#111111] border border-white/10 p-5 space-y-4 shadow-2xl max-h-[92vh] overflow-y-auto">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm">
+      <div className="bg-[#111111] border border-white/20 w-full max-w-2xl max-h-[92vh] overflow-y-auto p-5 space-y-4 shadow-2xl">
+        {/* Modal Header */}
         <div className="flex items-center justify-between pb-3 border-b border-white/10">
           <div>
-            <span className="text-[10px] font-mono text-[#C6FF00] uppercase">// NOVO PROJETO</span>
-            <h3 className="font-mono text-base font-bold text-white">Cadastrar Demanda & Sprint</h3>
+            <span className="text-[10px] font-mono text-[#C6FF00] uppercase">
+              {projectToEdit ? '// EDITAR PROJETO' : '// NOVO PROJETO'}
+            </span>
+            <h3 className="font-mono text-base font-bold text-white">
+              {projectToEdit ? 'Atualizar Dados da Sprint' : 'Cadastrar Demanda & Sprint'}
+            </h3>
           </div>
-          <button onClick={onClose} className="text-white/60 hover:text-white p-1">
+          <button onClick={onClose} className="text-white/60 hover:text-white p-1 cursor-pointer">
             <X className="w-5 h-5" />
           </button>
         </div>
+
+        {errorMsg && (
+          <div className="p-3 bg-rose-950/40 border border-rose-500/40 text-rose-300 text-xs font-mono flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 shrink-0" />
+            <span>{errorMsg}</span>
+          </div>
+        )}
 
         <form onSubmit={handleSubmit} className="space-y-4 text-xs font-mono">
           {/* Nome do Projeto */}
@@ -1142,7 +1309,6 @@ function NewProjectModal({
                 onChange={(e) => setResponsibleId(e.target.value)}
                 className="w-full bg-[#161616] border border-white/10 px-3 py-2 text-white focus:outline-none focus:border-[#C6FF00] cursor-pointer"
               >
-                <option value="">-- Selecione --</option>
                 <option value="felipe">Felipe</option>
                 <option value="pietro">Pietro</option>
                 {profiles
@@ -1170,7 +1336,7 @@ function NewProjectModal({
             </div>
 
             <div>
-              <label className="block text-[10px] text-white/50 uppercase mb-1">Status Inicial</label>
+              <label className="block text-[10px] text-white/50 uppercase mb-1">Status</label>
               <select
                 value={status}
                 onChange={(e) => setStatus(e.target.value as ProjectStatus)}
@@ -1229,65 +1395,67 @@ function NewProjectModal({
             />
           </div>
 
-          {/* Tarefas Iniciais */}
-          <div className="space-y-2">
-            <label className="block text-[10px] text-white/50 uppercase">
-              Checklist Inicial de Entregáveis:
-            </label>
-            <div className="space-y-1.5">
-              {taskInputs.map((t, idx) => (
-                <div key={idx} className="flex items-center gap-2">
-                  <span className="text-[10px] text-[#C6FF00] font-bold">{idx + 1}.</span>
-                  <input
-                    type="text"
-                    value={t}
-                    onChange={(e) => {
-                      const updated = [...taskInputs];
-                      updated[idx] = e.target.value;
-                      setTaskInputs(updated);
-                    }}
-                    className="flex-1 bg-[#161616] border border-white/5 px-2.5 py-1.5 text-xs text-white"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setTaskInputs(taskInputs.filter((_, i) => i !== idx))}
-                    className="text-white/30 hover:text-rose-400 p-1"
-                  >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              ))}
-            </div>
+          {/* Tarefas Iniciais (apenas na criação) */}
+          {!projectToEdit && (
+            <div className="space-y-2">
+              <label className="block text-[10px] text-white/50 uppercase">
+                Checklist Inicial de Entregáveis:
+              </label>
+              <div className="space-y-1.5">
+                {taskInputs.map((t, idx) => (
+                  <div key={idx} className="flex items-center gap-2">
+                    <span className="text-[10px] text-[#C6FF00] font-bold">{idx + 1}.</span>
+                    <input
+                      type="text"
+                      value={t}
+                      onChange={(e) => {
+                        const updated = [...taskInputs];
+                        updated[idx] = e.target.value;
+                        setTaskInputs(updated);
+                      }}
+                      className="flex-1 bg-[#161616] border border-white/5 px-2.5 py-1.5 text-xs text-white"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setTaskInputs(taskInputs.filter((_, i) => i !== idx))}
+                      className="text-white/30 hover:text-rose-400 p-1 cursor-pointer"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
 
-            <div className="flex items-center gap-2 pt-1">
-              <input
-                type="text"
-                value={newTaskText}
-                onChange={(e) => setNewTaskText(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && newTaskText.trim()) {
-                    e.preventDefault();
-                    setTaskInputs([...taskInputs, newTaskText.trim()]);
-                    setNewTaskText('');
-                  }
-                }}
-                placeholder="+ Adicionar outra etapa..."
-                className="flex-1 bg-[#161616] border border-white/10 px-2.5 py-1.5 text-xs text-white"
-              />
-              <button
-                type="button"
-                onClick={() => {
-                  if (newTaskText.trim()) {
-                    setTaskInputs([...taskInputs, newTaskText.trim()]);
-                    setNewTaskText('');
-                  }
-                }}
-                className="px-2.5 py-1.5 bg-white/10 hover:bg-white/20 text-white text-xs font-mono"
-              >
-                + Incluir
-              </button>
+              <div className="flex items-center gap-2 pt-1">
+                <input
+                  type="text"
+                  value={newTaskText}
+                  onChange={(e) => setNewTaskText(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && newTaskText.trim()) {
+                      e.preventDefault();
+                      setTaskInputs([...taskInputs, newTaskText.trim()]);
+                      setNewTaskText('');
+                    }
+                  }}
+                  placeholder="+ Adicionar outra etapa..."
+                  className="flex-1 bg-[#161616] border border-white/10 px-2.5 py-1.5 text-xs text-white"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (newTaskText.trim()) {
+                      setTaskInputs([...taskInputs, newTaskText.trim()]);
+                      setNewTaskText('');
+                    }
+                  }}
+                  className="px-2.5 py-1.5 bg-white/10 hover:bg-white/20 text-white text-xs font-mono cursor-pointer"
+                >
+                  + Incluir
+                </button>
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Modal Footer */}
           <div className="flex items-center justify-end gap-2 pt-3 border-t border-white/10">
@@ -1308,7 +1476,7 @@ function NewProjectModal({
               ) : (
                 <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
               )}
-              <span>CRIAR PROJETO</span>
+              <span>{projectToEdit ? 'SALVAR ALTERAÇÕES' : 'CRIAR PROJETO'}</span>
             </button>
           </div>
         </form>

@@ -82,6 +82,14 @@ export function ClientsViewReal() {
     loadData();
   }, [loadData]);
 
+  useEffect(() => {
+    const handleGlobalRefresh = () => {
+      loadData();
+    };
+    window.addEventListener('vulto:refresh', handleGlobalRefresh);
+    return () => window.removeEventListener('vulto:refresh', handleGlobalRefresh);
+  }, [loadData]);
+
   // Keep selected client updated if data reloaded
   useEffect(() => {
     if (selectedClient) {

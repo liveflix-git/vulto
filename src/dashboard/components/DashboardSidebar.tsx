@@ -71,7 +71,7 @@ export function DashboardSidebar({
     {
       id: 'pricing',
       label: 'Serviços & Preços',
-      sublabel: 'Tabela & Simulador',
+      sublabel: 'Anotações & Scripts',
       icon: Layers,
     },
     {

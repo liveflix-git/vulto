@@ -338,6 +338,10 @@ export function DashboardApp({
         onSwitchUser={handleSwitchUser}
         onOpenNewRecord={() => setIsModalOpen(true)}
         onNavigatePublic={() => onNavigatePublic('/')}
+        onRefreshData={async () => {
+          window.dispatchEvent(new CustomEvent('vulto:refresh'));
+          await new Promise((r) => setTimeout(r, 600));
+        }}
         onResetData={handleResetData}
         onSignOut={handleSignOut}
       />

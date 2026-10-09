@@ -1,12 +1,13 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   ShieldCheck,
   ArrowUpRight,
   Plus,
   RefreshCw,
   LogOut,
-  UserCheck,
   ChevronDown,
+  Check,
+  AlertCircle,
 } from 'lucide-react';
 import { PartnerId, PartnerUser } from '../types';
 import { PARTNERS } from '../dashboardStorage';
@@ -17,6 +18,7 @@ interface DashboardHeaderProps {
   onSwitchUser: (userId: PartnerId) => void;
   onOpenNewRecord: () => void;
   onNavigatePublic: () => void;
+  onRefreshData?: () => Promise<void> | void;
   onResetData: () => void;
   onSignOut: () => void;
 }
@@ -27,10 +29,37 @@ export function DashboardHeader({
   onSwitchUser,
   onOpenNewRecord,
   onNavigatePublic,
+  onRefreshData,
   onResetData,
   onSignOut,
 }: DashboardHeaderProps) {
   const activePartner: PartnerUser = PARTNERS[currentUser] || PARTNERS.felipe;
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [refreshStatus, setRefreshStatus] = useState<'idle' | 'updating' | 'success' | 'error'>('idle');
+
+  const handleGlobalRefresh = async () => {
+    if (isRefreshing) return;
+    setIsRefreshing(true);
+    setRefreshStatus('updating');
+
+    try {
+      if (onRefreshData) {
+        await onRefreshData();
+      } else {
+        // Disparar evento para componentes ouvirem se necessário
+        window.dispatchEvent(new CustomEvent('vulto:refresh'));
+        await new Promise((resolve) => setTimeout(resolve, 600));
+      }
+      setRefreshStatus('success');
+      setTimeout(() => setRefreshStatus('idle'), 2000);
+    } catch (err) {
+      console.error('Erro ao atualizar dados:', err);
+      setRefreshStatus('error');
+      setTimeout(() => setRefreshStatus('idle'), 3000);
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
 
   return (
     <header className="h-16 border-b border-white/10 bg-[#0A0A0A]/95 backdrop-blur-md px-4 sm:px-6 flex items-center justify-between sticky top-0 z-30 select-none">
@@ -54,6 +83,29 @@ export function DashboardHeader({
 
       {/* Right controls */}
       <div className="flex items-center gap-2 sm:gap-3">
+        {/* Botão Central de Atualizar Dados */}
+        <button
+          onClick={handleGlobalRefresh}
+          disabled={isRefreshing}
+          className="flex items-center gap-1.5 px-3 py-1.5 bg-[#141414] hover:bg-[#1E1E1E] border border-white/10 text-white/80 hover:text-white text-xs font-mono transition-colors cursor-pointer disabled:opacity-50"
+          title="Recarregar dados do Supabase"
+        >
+          <RefreshCw
+            className={`w-3.5 h-3.5 ${
+              isRefreshing ? 'animate-spin text-[#C6FF00]' : refreshStatus === 'success' ? 'text-[#C6FF00]' : 'text-white/60'
+            }`}
+          />
+          <span className="hidden sm:inline">
+            {refreshStatus === 'updating'
+              ? 'ATUALIZANDO...'
+              : refreshStatus === 'success'
+              ? 'ATUALIZADO'
+              : refreshStatus === 'error'
+              ? 'ERRO AO ATUALIZAR'
+              : 'ATUALIZAR'}
+          </span>
+        </button>
+
         {/* Quick New Record */}
         <button
           onClick={onOpenNewRecord}
@@ -94,19 +146,6 @@ export function DashboardHeader({
             <ChevronDown className="w-3 h-3 text-white/40" />
           </button>
         </div>
-
-        {/* Reset Mock DB */}
-        <button
-          onClick={() => {
-            if (window.confirm('Deseja resetar os dados internos para os padrões da VULTO LAB?')) {
-              onResetData();
-            }
-          }}
-          className="p-2 text-white/40 hover:text-white/80 hover:bg-[#141414] border border-transparent hover:border-white/10 transition-colors cursor-pointer hidden sm:flex"
-          title="Restaurar dados iniciais"
-        >
-          <RefreshCw className="w-3.5 h-3.5" />
-        </button>
 
         {/* Return to Public Site */}
         <button
