@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 1000" width="1000" height="1000">
+  <rect width="1000" height="1000" fill="#000000"/>
+  <!-- Haste Esquerda do V (Branco) -->
+  <polygon points="205,330 365,330 490,560 415,700" fill="#FFFFFF"/>
+  <!-- Triângulo Acento Lima (#C6FF00) -->
+  <polygon points="510,300 740,300 510,530" fill="#C6FF00"/>
+  <!-- Base Horizontal do L (Branco) -->
+  <polygon points="506,560 716,560 796,700 442,700" fill="#FFFFFF"/>
+</svg>
