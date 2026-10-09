@@ -1,179 +1,109 @@
 import React from 'react';
 import {
   LayoutDashboard,
-  Wallet,
+  DollarSign,
   Users,
-  Layers,
   FolderGit2,
-  CreditCard,
-  FileText,
-  MessageCircle,
-  ExternalLink,
+  Package,
+  FileBarChart,
+  LogOut,
+  X,
 } from 'lucide-react';
-import { DashboardTab, PartnerId } from '../types';
-import { PARTNERS } from '../dashboardStorage';
+
+export type VultoTab =
+  | 'overview'
+  | 'finance'
+  | 'clients'
+  | 'projects_services'
+  | 'inventory_nfc'
+  | 'reports';
 
 interface DashboardSidebarProps {
-  currentTab: DashboardTab;
-  onSelectTab: (tab: DashboardTab) => void;
-  currentUser: PartnerId;
-  counts: {
-    pendingTransactions: number;
-    activeDeals: number;
-    activeClients: number;
-    activeProjects: number;
-    activeTapBatches: number;
-  };
+  currentTab: VultoTab;
+  onSelectTab: (tab: VultoTab) => void;
+  isOpenMobile?: boolean;
+  onCloseMobile?: () => void;
 }
+
+const NAV_ITEMS: { id: VultoTab; label: string; icon: React.ElementType }[] = [
+  { id: 'overview', label: 'VISÃO GERAL', icon: LayoutDashboard },
+  { id: 'finance', label: 'FINANCEIRO', icon: DollarSign },
+  { id: 'clients', label: 'CLIENTES', icon: Users },
+  { id: 'projects_services', label: 'PROJETOS & SERVIÇOS', icon: FolderGit2 },
+  { id: 'inventory_nfc', label: 'ESTOQUE NFC', icon: Package },
+  { id: 'reports', label: 'RELATÓRIOS', icon: FileBarChart },
+];
 
 export function DashboardSidebar({
   currentTab,
   onSelectTab,
-  currentUser,
-  counts,
+  isOpenMobile = false,
+  onCloseMobile,
 }: DashboardSidebarProps) {
-  const otherPartner = currentUser === 'felipe' ? PARTNERS.pietro : PARTNERS.felipe;
-
-  const NAV_ITEMS: {
-    id: DashboardTab;
-    label: string;
-    sublabel: string;
-    icon: React.ComponentType<{ className?: string }>;
-    badge?: number;
-  }[] = [
-    {
-      id: 'overview',
-      label: 'Visão Geral',
-      sublabel: 'Resumo Executivo',
-      icon: LayoutDashboard,
-    },
-    {
-      id: 'finance',
-      label: 'Financeiro',
-      sublabel: 'Caixa, Vendas & Propostas',
-      icon: Wallet,
-      badge: counts.pendingTransactions > 0 ? counts.pendingTransactions : undefined,
-    },
-    {
-      id: 'clients',
-      label: 'Clientes',
-      sublabel: 'Base Ativa & MRR',
-      icon: Users,
-      badge: counts.activeClients,
-    },
-    {
-      id: 'projects',
-      label: 'Projetos & Entregas',
-      sublabel: 'Operação & Demandas',
-      icon: FolderGit2,
-      badge: counts.activeProjects,
-    },
-    {
-      id: 'pricing',
-      label: 'Serviços & Preços',
-      sublabel: 'Anotações & Scripts',
-      icon: Layers,
-    },
-    {
-      id: 'vulto_tap',
-      label: 'VULTO TAP (NFC)',
-      sublabel: 'Estoque & Lotes Físicos',
-      icon: CreditCard,
-    },
-    {
-      id: 'reports',
-      label: 'Relatórios',
-      sublabel: 'Auditoria & Exportação',
-      icon: FileText,
-    },
-  ];
-
-  return (
-    <aside className="w-64 border-r border-white/10 bg-[#0E0E0E] flex flex-col justify-between shrink-0">
-      <div className="py-4">
-        {/* Navigation list */}
-        <div className="px-3 pb-2 text-[10px] font-mono tracking-widest text-white/40 uppercase">
-          Módulos Operacionais
+  const content = (
+    <div className="h-full flex flex-col justify-between p-4 bg-[#0A0A0A] border-r border-white/10 select-none">
+      {/* Top Nav */}
+      <div className="space-y-6">
+        <div className="flex items-center justify-between pb-2 border-b border-white/10 lg:hidden">
+          <span className="font-mono text-xs text-white/50 tracking-wider">MENU DASHBOARD</span>
+          {onCloseMobile && (
+            <button
+              onClick={onCloseMobile}
+              className="text-white/40 hover:text-white p-1"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          )}
         </div>
-        <nav className="space-y-1 px-2">
+
+        <nav className="space-y-1.5 font-mono">
           {NAV_ITEMS.map((item) => {
             const Icon = item.icon;
             const isActive = currentTab === item.id;
-
             return (
               <button
                 key={item.id}
-                onClick={() => onSelectTab(item.id)}
-                className={`w-full flex items-center justify-between px-3 py-2.5 text-left text-xs font-mono transition-colors duration-150 cursor-pointer ${
+                onClick={() => {
+                  onSelectTab(item.id);
+                  if (onCloseMobile) onCloseMobile();
+                }}
+                className={`w-full flex items-center gap-3 px-3.5 py-3 text-xs tracking-wider transition-all text-left cursor-pointer ${
                   isActive
-                    ? 'bg-[#1C1C1C] text-white border-l-2 border-[#C6FF00] font-semibold'
-                    : 'text-white/60 hover:text-white hover:bg-[#141414] border-l-2 border-transparent'
+                    ? 'bg-[#141414] text-[#C6FF00] border-l-2 border-[#C6FF00] font-bold'
+                    : 'text-white/60 hover:text-white hover:bg-[#121212] border-l-2 border-transparent'
                 }`}
               >
-                <div className="flex items-center gap-2.5 truncate">
-                  <Icon
-                    className={`w-4 h-4 shrink-0 ${
-                      isActive ? 'text-[#C6FF00]' : 'text-white/40'
-                    }`}
-                  />
-                  <div className="truncate">
-                    <span className="block leading-none">{item.label}</span>
-                    <span className="text-[10px] text-white/30 block mt-0.5 font-sans font-normal truncate">
-                      {item.sublabel}
-                    </span>
-                  </div>
-                </div>
-
-                {item.badge !== undefined && (
-                  <span
-                    className={`text-[10px] px-1.5 py-0.2 font-mono font-bold ${
-                      isActive
-                        ? 'bg-[#C6FF00] text-[#0A0A0A]'
-                        : 'bg-white/10 text-white/60'
-                    }`}
-                  >
-                    {item.badge}
-                  </span>
-                )}
+                <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-[#C6FF00]' : 'text-white/40'}`} />
+                <span>{item.label}</span>
               </button>
             );
           })}
         </nav>
       </div>
 
-      {/* Partner Quick Communication Box */}
-      <div className="p-3 border-t border-white/10 bg-[#0A0A0A]">
-        <div className="text-[10px] font-mono text-white/40 mb-2 flex items-center justify-between">
-          <span>ALINHAMENTO ENTRE SÓCIOS</span>
-          <span className="text-[#C6FF00]">2/2 ON</span>
-        </div>
-
-        <a
-          href={`https://wa.me/${otherPartner.whatsapp}?text=${encodeURIComponent(
-            'Fala, sócio! Alinhando as demandas aqui pelo Dashboard Vulto Lab.'
-          )}`}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="flex items-center justify-between p-2.5 bg-[#141414] hover:bg-[#1C1C1C] border border-white/10 text-xs font-mono text-white/80 transition-colors"
-        >
-          <div className="flex items-center gap-2 truncate">
-            <MessageCircle className="w-3.5 h-3.5 text-[#C6FF00] shrink-0" />
-            <div className="truncate">
-              <span className="block text-[11px] font-bold text-white truncate">
-                Chamar {otherPartner.name.split(' ')[0]}
-              </span>
-              <span className="text-[9px] text-white/40 block truncate">
-                {otherPartner.role}
-              </span>
-            </div>
-          </div>
-          <ExternalLink className="w-3 h-3 text-white/30 shrink-0" />
-        </a>
-
-        <div className="mt-3 text-[9px] font-mono text-center text-white/30">
-          VULTO LAB — ALL RIGHTS RESERVED 2026
-        </div>
+      {/* Footer Minimal */}
+      <div className="pt-4 border-t border-white/10 font-mono text-[10px] text-white/30 text-center">
+        VULTO LAB CORE
       </div>
-    </aside>
+    </div>
+  );
+
+  return (
+    <>
+      {/* Desktop sidebar */}
+      <aside className="hidden lg:block w-64 shrink-0 h-[calc(100vh-4rem)] sticky top-16">
+        {content}
+      </aside>
+
+      {/* Mobile drawer */}
+      {isOpenMobile && (
+        <div className="fixed inset-0 z-40 lg:hidden flex">
+          <div className="fixed inset-0 bg-black/80" onClick={onCloseMobile} />
+          <div className="relative w-64 max-w-[80vw] h-full z-50">
+            {content}
+          </div>
+        </div>
+      )}
+    </>
   );
 }

@@ -2,36 +2,23 @@ import React, { useState, useEffect } from 'react';
 import { Session, User } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 import {
-  DashboardTab,
-  PartnerId,
-  DashboardState,
-  FinancialTransaction,
-  DealItem,
-  ClientRecord,
-  VultoTapBatch,
-  PipelineStage,
-} from './types';
-import {
-  loadDashboardState,
-  saveDashboardState,
-  resetDashboardState,
-} from './dashboardStorage';
-import {
-  persistSupabaseTransaction,
-  persistSupabaseDeal,
-  persistSupabaseClient,
-} from '../lib/supabaseSync';
+  VultoOperator,
+  getActiveOperatorSession,
+  setActiveOperatorSession,
+  clearActiveOperatorSession,
+  fetchVultoOperators,
+} from '../services/vultoCoreService';
 import { DashboardHeader } from './components/DashboardHeader';
-import { DashboardSidebar } from './components/DashboardSidebar';
+import { DashboardSidebar, VultoTab } from './components/DashboardSidebar';
 import { DashboardLogin } from './components/DashboardLogin';
+import { OperatorSelectModal } from './components/OperatorSelectModal';
 import { OverviewView } from './components/OverviewView';
-import { FinanceViewReal } from './components/FinanceViewReal';
-import { ClientsViewReal } from './components/ClientsViewReal';
-import { ServicesPricingView } from './components/ServicesPricingView';
-import { ProjectsViewReal } from './components/ProjectsViewReal';
-import { VultoTapViewReal } from './components/VultoTapViewReal';
+import { FinanceView } from './components/FinanceView';
+import { ClientsView } from './components/ClientsView';
+import { ProjectsServicesView } from './components/ProjectsServicesView';
+import { InventoryNfcView } from './components/InventoryNfcView';
 import { ReportsView } from './components/ReportsView';
-import { NewRecordModal } from './components/NewRecordModal';
+import { Menu } from 'lucide-react';
 
 interface DashboardAppProps {
   currentPath?: string;
@@ -44,65 +31,65 @@ export function DashboardApp({
   onNavigate,
   onNavigatePublic,
 }: DashboardAppProps) {
-  const [state, setState] = useState<DashboardState>(() => loadDashboardState());
-  const [currentTab, setCurrentTab] = useState<DashboardTab>(() => {
-    if (currentPath.includes('/crm') || currentPath.includes('/pipeline') || currentPath.includes('/financeiro')) return 'finance';
-    if (currentPath.includes('/clientes')) return 'clients';
-    if (currentPath.includes('/vulto-tap')) return 'vulto_tap';
-    if (currentPath.includes('/projetos')) return 'projects';
-    if (currentPath.includes('/precos') || currentPath.includes('/servicos')) return 'pricing';
-    if (currentPath.includes('/relatorios')) return 'reports';
-    return 'overview';
-  });
-
-  // Sync tab when currentPath changes externally
-  useEffect(() => {
-    if (currentPath.includes('/crm') || currentPath.includes('/pipeline') || currentPath.includes('/financeiro')) {
-      setCurrentTab('finance');
-    } else if (currentPath.includes('/clientes')) {
-      setCurrentTab('clients');
-    } else if (currentPath.includes('/vulto-tap')) {
-      setCurrentTab('vulto_tap');
-    } else if (currentPath.includes('/projetos')) {
-      setCurrentTab('projects');
-    } else if (currentPath.includes('/precos') || currentPath.includes('/servicos')) {
-      setCurrentTab('pricing');
-    } else if (currentPath.includes('/relatorios')) {
-      setCurrentTab('reports');
-    } else if (currentPath.includes('/metas')) {
-      setCurrentTab('overview');
-    }
-  }, [currentPath]);
-  const [isModalOpen, setIsModalOpen] = useState(false);
-
-  // Real Supabase Auth State
+  // Sessão Supabase
   const [session, setSession] = useState<Session | null>(null);
   const [authUser, setAuthUser] = useState<User | null>(null);
   const [isAuthLoading, setIsAuthLoading] = useState(true);
 
+  // Operador ativo (Felipe ou Pietro)
+  const [activeOperator, setActiveOperator] = useState<VultoOperator | null>(() =>
+    getActiveOperatorSession()
+  );
+  const [isOperatorModalOpen, setIsOperatorModalOpen] = useState(false);
+  const [isChangingOperator, setIsChangingOperator] = useState(false);
+
+  // Mobile drawer
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
+  // Aba ativa da nova sidebar limpa
+  const [currentTab, setCurrentTab] = useState<VultoTab>(() => {
+    if (currentPath.includes('/financeiro') || currentPath.includes('/crm') || currentPath.includes('/pipeline')) return 'finance';
+    if (currentPath.includes('/clientes')) return 'clients';
+    if (currentPath.includes('/projetos') || currentPath.includes('/servicos') || currentPath.includes('/precos')) return 'projects_services';
+    if (currentPath.includes('/vulto-tap') || currentPath.includes('/estoque')) return 'inventory_nfc';
+    if (currentPath.includes('/relatorios')) return 'reports';
+    return 'overview';
+  });
+
+  // Sincronizar tab se a URL mudar
   useEffect(() => {
-    // 1. Initial session verification
+    if (currentPath.includes('/financeiro') || currentPath.includes('/crm') || currentPath.includes('/pipeline')) {
+      setCurrentTab('finance');
+    } else if (currentPath.includes('/clientes')) {
+      setCurrentTab('clients');
+    } else if (currentPath.includes('/projetos') || currentPath.includes('/servicos') || currentPath.includes('/precos')) {
+      setCurrentTab('projects_services');
+    } else if (currentPath.includes('/vulto-tap') || currentPath.includes('/estoque')) {
+      setCurrentTab('inventory_nfc');
+    } else if (currentPath.includes('/relatorios')) {
+      setCurrentTab('reports');
+    }
+  }, [currentPath]);
+
+  // Verificar Auth do Supabase
+  useEffect(() => {
     supabase.auth
       .getSession()
-      .then(({ data: { session: initialSession }, error }) => {
-        if (error) {
-          console.error('Erro ao verificar sessão Supabase:', error);
-        }
-        setSession(initialSession);
-        setAuthUser(initialSession?.user ?? null);
+      .then(({ data: { session: s } }) => {
+        setSession(s);
+        setAuthUser(s?.user ?? null);
         setIsAuthLoading(false);
       })
       .catch((err) => {
-        console.error('Falha inesperada ao recuperar sessão:', err);
+        console.error('Erro ao verificar sessão Supabase:', err);
         setIsAuthLoading(false);
       });
 
-    // 2. Real-time auth state listener
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, currentSession) => {
-      setSession(currentSession);
-      setAuthUser(currentSession?.user ?? null);
+    } = supabase.auth.onAuthStateChange((_event, s) => {
+      setSession(s);
+      setAuthUser(s?.user ?? null);
       setIsAuthLoading(false);
     });
 
@@ -111,273 +98,134 @@ export function DashboardApp({
     };
   }, []);
 
-  // Save changes to local state storage whenever state updates
+  // Quando logado sem operador ativo, pedir para escolher quem está usando
   useEffect(() => {
-    saveDashboardState(state);
-  }, [state]);
+    if (session && !activeOperator) {
+      setIsOperatorModalOpen(true);
+    }
+  }, [session, activeOperator]);
+
+  const handleSelectOperator = (op: VultoOperator) => {
+    setActiveOperatorSession(op);
+    setActiveOperator(op);
+    setIsOperatorModalOpen(false);
+    setIsChangingOperator(false);
+  };
 
   const handleSignOut = async () => {
     try {
       await supabase.auth.signOut();
     } catch (err) {
-      console.error('Erro ao encerrar sessão Supabase:', err);
+      console.error(err);
     }
+    clearActiveOperatorSession();
+    setActiveOperator(null);
     setSession(null);
     setAuthUser(null);
-    if (onNavigate) {
-      onNavigate('/dashboard/login');
-    }
   };
 
-  const handleLoginSuccess = () => {
-    if (onNavigate && currentPath.includes('/login')) {
-      onNavigate('/dashboard');
-    }
-  };
-
-  const handleSwitchUser = (userId: PartnerId) => {
-    setState((prev) => ({ ...prev, currentUser: userId }));
-    localStorage.setItem('vulto_active_partner', userId);
-  };
-
-  const handleSelectTab = (tab: DashboardTab) => {
+  const handleSelectTab = (tab: VultoTab) => {
     setCurrentTab(tab);
     if (onNavigate) {
       if (tab === 'overview') onNavigate('/dashboard');
-      else if (tab === 'finance' || tab === 'pipeline' || tab === 'crm') onNavigate('/dashboard/financeiro');
+      else if (tab === 'finance') onNavigate('/dashboard/financeiro');
       else if (tab === 'clients') onNavigate('/dashboard/clientes');
-      else if (tab === 'vulto_tap') onNavigate('/dashboard/vulto-tap');
-      else if (tab === 'goals') onNavigate('/dashboard');
-      else if (tab === 'projects') onNavigate('/dashboard/projetos');
-      else if (tab === 'pricing') onNavigate('/dashboard/precos');
+      else if (tab === 'projects_services') onNavigate('/dashboard/projetos');
+      else if (tab === 'inventory_nfc') onNavigate('/dashboard/vulto-tap');
       else if (tab === 'reports') onNavigate('/dashboard/relatorios');
     }
   };
 
-  const handleResetData = () => {
-    const refreshed = resetDashboardState();
-    setState(refreshed);
+  const handleGlobalRefresh = async () => {
+    window.dispatchEvent(new CustomEvent('vulto:refresh'));
+    await new Promise((resolve) => setTimeout(resolve, 400));
   };
 
-  // Transaction handlers
-  const handleAddTransaction = (newTx: FinancialTransaction) => {
-    setState((prev) => ({
-      ...prev,
-      transactions: [newTx, ...prev.transactions],
-    }));
-    // Asynchronously try to persist in Supabase if table exists
-    persistSupabaseTransaction(newTx).catch(() => {});
-  };
-
-  const handleUpdateTxStatus = (id: string, status: 'paid' | 'pending') => {
-    setState((prev) => ({
-      ...prev,
-      transactions: prev.transactions.map((t) =>
-        t.id === id ? { ...t, status } : t
-      ),
-    }));
-  };
-
-  // Deal handlers
-  const handleAddDeal = (deal: DealItem) => {
-    setState((prev) => ({
-      ...prev,
-      deals: [deal, ...prev.deals],
-    }));
-    persistSupabaseDeal(deal).catch(() => {});
-  };
-
-  const handleUpdateDealStage = (dealId: string, nextStage: PipelineStage) => {
-    setState((prev) => ({
-      ...prev,
-      deals: prev.deals.map((d) =>
-        d.id === dealId
-          ? {
-              ...d,
-              stage: nextStage,
-              probability: nextStage === 'won' ? 100 : nextStage === 'lost' ? 0 : d.probability,
-              updatedAt: new Date().toISOString().slice(0, 10),
-            }
-          : d
-      ),
-    }));
-  };
-
-  // Client handlers
-  const handleAddClient = (client: ClientRecord) => {
-    setState((prev) => ({
-      ...prev,
-      clients: [client, ...prev.clients],
-    }));
-    persistSupabaseClient(client).catch(() => {});
-  };
-
-  // Batch handlers
-  const handleAddBatch = (batch: VultoTapBatch) => {
-    setState((prev) => ({
-      ...prev,
-      batches: [batch, ...prev.batches],
-    }));
-  };
-
-  // Project task toggle
-  const handleToggleTask = (projectId: string, taskId: string) => {
-    setState((prev) => ({
-      ...prev,
-      projects: prev.projects.map((proj) => {
-        if (proj.id !== projectId) return proj;
-        const updatedTasks = proj.tasks.map((t) =>
-          t.id === taskId ? { ...t, completed: !t.completed } : t
-        );
-        const completedCount = updatedTasks.filter((t) => t.completed).length;
-        const progressPercent = Math.round(
-          (completedCount / updatedTasks.length) * 100
-        );
-        return {
-          ...proj,
-          tasks: updatedTasks,
-          progressPercent,
-          status: progressPercent === 100 ? 'delivered' : proj.status,
-        };
-      }),
-    }));
-  };
-
-  // Pending counts for sidebar badges
-  const pendingTransactionsCount = state.transactions.filter(
-    (t) => t.status === 'pending'
-  ).length;
-  const activeDealsCount = state.deals.filter(
-    (d) => d.stage !== 'won' && d.stage !== 'lost'
-  ).length;
-  const activeClientsCount = state.clients.filter(
-    (c) => c.status === 'active'
-  ).length;
-  const activeProjectsCount = state.projects.filter(
-    (p) => p.status === 'in_progress' || p.status === 'review'
-  ).length;
-  const activeTapBatchesCount = state.batches.filter(
-    (b) => b.status === 'engraving' || b.status === 'shipped'
-  ).length;
-
-  // 1. Initial Authentication Check Screen (Zero-flash protection)
+  // 1. Tela de Carregamento
   if (isAuthLoading) {
     return (
-      <div className="min-h-screen bg-[#0A0A0A] flex flex-col items-center justify-center p-4">
-        <div className="flex flex-col items-center gap-4 text-center">
-          <div className="w-9 h-9 border-2 border-[#C6FF00] border-t-transparent animate-spin" />
-          <div className="flex items-center gap-2">
-            <div className="w-2 h-2 bg-[#C6FF00] animate-pulse" />
-            <span className="font-mono text-xs font-bold tracking-widest text-white">
-              VULTO LAB // CORE OS
-            </span>
-          </div>
-          <p className="font-mono text-[11px] text-white/40 tracking-wider">
-            VALIDANDO SESSÃO SUPABASE...
-          </p>
-        </div>
+      <div className="min-h-screen bg-[#0A0A0A] flex flex-col items-center justify-center text-white">
+        <div className="w-8 h-8 border-2 border-[#C6FF00] border-t-transparent animate-spin mb-4" />
+        <span className="font-mono text-xs tracking-widest text-white/50">
+          CARREGANDO PAINEL VULTO LAB...
+        </span>
       </div>
     );
   }
 
-  // 2. Unauthenticated State -> Show Protected Login Screen
+  // 2. Tela de Login se não autenticado
   if (!session) {
     return (
       <DashboardLogin
-        onSuccess={handleLoginSuccess}
+        onSuccess={() => {}}
         onNavigatePublic={() => onNavigatePublic('/')}
       />
     );
   }
 
-  // 3. Authenticated State -> Render Full Executive Dashboard
-  const renderActiveTab = () => {
-    switch (currentTab) {
-      case 'overview':
-        return (
-          <OverviewView
-            state={state}
-            onNavigateTab={setCurrentTab}
-            currentUser={state.currentUser}
-            onOpenNewRecord={() => setIsModalOpen(true)}
-          />
-        );
-      case 'finance':
-      case 'pipeline':
-      case 'crm':
-        return <FinanceViewReal />;
-      case 'clients':
-        return <ClientsViewReal />;
-      case 'pricing':
-        return <ServicesPricingView />;
-      case 'projects':
-        return <ProjectsViewReal />;
-      case 'vulto_tap':
-        return <VultoTapViewReal />;
-      case 'reports':
-        return <ReportsView state={state} />;
-      case 'goals':
-      default:
-        return (
-          <OverviewView
-            state={state}
-            onNavigateTab={setCurrentTab}
-            currentUser={state.currentUser}
-            onOpenNewRecord={() => setIsModalOpen(true)}
-          />
-        );
-    }
-  };
-
   return (
     <div className="min-h-screen bg-[#0A0A0A] text-[#F4F4F1] flex flex-col selection:bg-[#C6FF00] selection:text-[#0A0A0A]">
-      {/* Header */}
+      {/* Modal de Escolha de Operador Inicial ou Troca */}
+      {(isOperatorModalOpen || isChangingOperator) && (
+        <OperatorSelectModal
+          isChangeMode={isChangingOperator}
+          onClose={() => {
+            if (activeOperator) {
+              setIsChangingOperator(false);
+              setIsOperatorModalOpen(false);
+            }
+          }}
+          onSelect={handleSelectOperator}
+        />
+      )}
+
+      {/* Header Limpo */}
       <DashboardHeader
-        currentUser={state.currentUser}
-        userEmail={authUser?.email || session.user?.email}
-        onSwitchUser={handleSwitchUser}
-        onOpenNewRecord={() => setIsModalOpen(true)}
+        activeOperator={activeOperator}
+        onChangeOperatorClick={() => setIsChangingOperator(true)}
         onNavigatePublic={() => onNavigatePublic('/')}
-        onRefreshData={async () => {
-          window.dispatchEvent(new CustomEvent('vulto:refresh'));
-          await new Promise((r) => setTimeout(r, 600));
-        }}
-        onResetData={handleResetData}
+        onRefreshData={handleGlobalRefresh}
         onSignOut={handleSignOut}
       />
 
-      {/* Main Workspace Layout */}
+      {/* Barra mobile para abrir menu */}
+      <div className="lg:hidden bg-[#111111] border-b border-white/10 px-4 py-2 flex items-center justify-between">
+        <button
+          onClick={() => setIsMobileMenuOpen(true)}
+          className="flex items-center gap-2 text-xs font-mono text-white/70 hover:text-white"
+        >
+          <Menu className="w-4 h-4 text-[#C6FF00]" />
+          <span>MENU NAVEGAÇÃO</span>
+        </button>
+        <span className="text-[10px] font-mono text-white/40 uppercase">
+          {currentTab.replace('_', ' ')}
+        </span>
+      </div>
+
+      {/* Workspace */}
       <div className="flex-1 flex overflow-hidden">
-        {/* Sidebar Navigation */}
+        {/* Sidebar */}
         <DashboardSidebar
           currentTab={currentTab}
           onSelectTab={handleSelectTab}
-          currentUser={state.currentUser}
-          counts={{
-            pendingTransactions: pendingTransactionsCount,
-            activeDeals: activeDealsCount,
-            activeClients: activeClientsCount,
-            activeProjects: activeProjectsCount,
-            activeTapBatches: activeTapBatchesCount,
-          }}
+          isOpenMobile={isMobileMenuOpen}
+          onCloseMobile={() => setIsMobileMenuOpen(false)}
         />
 
-        {/* Dynamic View Viewport */}
+        {/* Área Principal */}
         <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 bg-[#0D0D0D]">
-          <div className="max-w-7xl mx-auto">{renderActiveTab()}</div>
+          <div className="max-w-7xl mx-auto space-y-6">
+            {currentTab === 'overview' && (
+              <OverviewView onNavigateTab={handleSelectTab} />
+            )}
+            {currentTab === 'finance' && <FinanceView />}
+            {currentTab === 'clients' && <ClientsView />}
+            {currentTab === 'projects_services' && <ProjectsServicesView />}
+            {currentTab === 'inventory_nfc' && <InventoryNfcView />}
+            {currentTab === 'reports' && <ReportsView />}
+          </div>
         </main>
       </div>
-
-      {/* Fast Record Creation Modal */}
-      <NewRecordModal
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
-        currentUser={state.currentUser}
-        onAddTransaction={handleAddTransaction}
-        onAddDeal={handleAddDeal}
-        onAddClient={handleAddClient}
-        onAddBatch={handleAddBatch}
-      />
     </div>
   );
 }

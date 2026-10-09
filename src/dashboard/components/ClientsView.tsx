@@ -1,322 +1,368 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Users,
-  Search,
   Plus,
-  Phone,
-  Mail,
-  ShieldCheck,
-  CheckCircle2,
+  Trash2,
   AlertCircle,
-  ExternalLink,
-  MessageCircle,
+  Check,
+  X,
+  Layers,
 } from 'lucide-react';
-import { ClientRecord, PartnerId } from '../types';
+import {
+  VultoClientItem,
+  VultoClientServiceType,
+  VultoOperator,
+  fetchVultoClients,
+  createVultoClient,
+  deleteVultoClient,
+  fetchVultoOperators,
+} from '../../services/vultoCoreService';
+import { supabase } from '../../lib/supabase';
 
-interface ClientsViewProps {
-  clients: ClientRecord[];
-  onOpenNewRecord: () => void;
-  currentUser: PartnerId;
-}
+const SERVICE_OPTIONS: { value: VultoClientServiceType; label: string }[] = [
+  { value: 'trafego_pago', label: 'Tráfego Pago' },
+  { value: 'vulto_nfc', label: 'VULTO NFC' },
+  { value: 'site', label: 'Site' },
+];
 
-export function ClientsView({
-  clients,
-  onOpenNewRecord,
-}: ClientsViewProps) {
-  const [search, setSearch] = useState('');
-  const [selectedClient, setSelectedClient] = useState<ClientRecord | null>(
-    clients[0] || null
-  );
+export function ClientsView() {
+  const [clients, setClients] = useState<VultoClientItem[]>([]);
+  const [operators, setOperators] = useState<VultoOperator[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const filtered = clients.filter((c) => {
-    if (!search) return true;
-    const q = search.toLowerCase();
-    return (
-      c.companyName.toLowerCase().includes(q) ||
-      c.contactName.toLowerCase().includes(q) ||
-      c.email.toLowerCase().includes(q) ||
-      c.services.some((s) => s.toLowerCase().includes(q))
-    );
-  });
+  // Modal Novo Cliente
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [clientName, setClientName] = useState('');
+  const [serviceType, setServiceType] = useState<VultoClientServiceType>('trafego_pago');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
 
-  const totalMrr = clients
-    .filter((c) => c.status === 'active')
-    .reduce((acc, c) => acc + c.monthlyRetainer, 0);
+  // Modal Exclusão
+  const [clientToDelete, setClientToDelete] = useState<VultoClientItem | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  // Toast Feedback
+  const [toastMessage, setToastMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  const showToast = (text: string, type: 'success' | 'error' = 'success') => {
+    setToastMessage({ type, text });
+    setTimeout(() => setToastMessage(null), 3000);
+  };
+
+  const loadData = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [ops, res] = await Promise.all([
+        fetchVultoOperators(),
+        fetchVultoClients(),
+      ]);
+      setOperators(ops);
+      setClients(res.data);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  // Listener para refresh global
+  useEffect(() => {
+    const handleGlobalRefresh = () => {
+      loadData();
+    };
+    window.addEventListener('vulto:refresh', handleGlobalRefresh);
+    return () => window.removeEventListener('vulto:refresh', handleGlobalRefresh);
+  }, [loadData]);
+
+  // Realtime subscription
+  useEffect(() => {
+    const channel = supabase
+      .channel('vulto_clients_realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'vulto_clients' }, () => {
+        fetchVultoClients().then((res) => setClients(res.data));
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
+
+  const getOperatorName = (operatorId: string | null) => {
+    if (!operatorId) return 'Operador';
+    const match = operators.find((op) => op.id === operatorId);
+    return match ? match.name : 'Operador';
+  };
+
+  const getServiceLabel = (type: VultoClientServiceType) => {
+    const match = SERVICE_OPTIONS.find((s) => s.value === type);
+    return match ? match.label : type;
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!clientName.trim()) {
+      setFormError('Informe o nome do cliente.');
+      return;
+    }
+
+    setIsSubmitting(true);
+    setFormError(null);
+
+    try {
+      const res = await createVultoClient({
+        name: clientName.trim(),
+        service_type: serviceType,
+      });
+
+      if (res.error) {
+        setFormError(res.error);
+      } else if (res.data) {
+        setClients((prev) => [res.data!, ...prev]);
+        setIsModalOpen(false);
+        setClientName('');
+        setServiceType('trafego_pago');
+        showToast('Cliente adicionado com sucesso.');
+      }
+    } catch (err: any) {
+      setFormError(err.message || 'Erro inesperado ao cadastrar.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // Exclusão prioritária com verificação estrita
+  const handleConfirmDelete = async () => {
+    if (!clientToDelete) return;
+    setIsDeleting(true);
+
+    try {
+      const res = await deleteVultoClient(clientToDelete.id);
+      if (res.error) {
+        // Se houver erro, NÃO esconde e mostra erro claro
+        showToast(`Não foi possível excluir o cliente: ${res.error}`, 'error');
+      } else {
+        // Sucesso: remove imediatamente do estado local
+        setClients((prev) => prev.filter((c) => c.id !== clientToDelete.id));
+        showToast('Cliente excluído com sucesso.');
+        setClientToDelete(null);
+      }
+    } catch (e: any) {
+      showToast('Não foi possível excluir o cliente.', 'error');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
   return (
     <div className="space-y-6">
-      {/* Top Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-[#111111] border border-white/10 p-5">
+      {/* Toast Feedback */}
+      {toastMessage && (
+        <div
+          className={`fixed bottom-6 right-6 z-50 px-4 py-3 border font-mono text-xs flex items-center gap-2 shadow-2xl transition-all ${
+            toastMessage.type === 'success'
+              ? 'bg-[#121212] border-[#C6FF00] text-[#C6FF00]'
+              : 'bg-rose-950/90 border-rose-500 text-rose-200'
+          }`}
+        >
+          {toastMessage.type === 'success' ? (
+            <Check className="w-4 h-4 stroke-[2.5]" />
+          ) : (
+            <AlertCircle className="w-4 h-4 text-rose-400" />
+          )}
+          <span className="font-bold tracking-wider">{toastMessage.text}</span>
+        </div>
+      )}
+
+      {/* Header */}
+      <div className="bg-[#111111] border border-white/10 p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <div className="flex items-center gap-2 mb-1">
-            <span className="text-[10px] font-mono tracking-widest text-[#C6FF00] uppercase">
-              // BASE DE CLIENTES
-            </span>
-            <span className="text-white/20">•</span>
-            <span className="text-[10px] font-mono text-white/50">
-              CARTEIRA ATIVA & RETENÇÃO
-            </span>
-          </div>
           <h1 className="text-xl sm:text-2xl font-bold font-mono text-white">
-            Carteira de Clientes & Contratos
+            CLIENTES
           </h1>
-          <p className="text-xs text-white/60 font-sans mt-0.5">
-            Gerenciamento dos clientes ativos, serviços contratados, faturamento recorrente e histórico.
+          <p className="text-xs text-white/50 font-sans mt-0.5">
+            Cadastro direto de contas ativas e contratos da VULTO LAB.
           </p>
         </div>
 
         <button
-          onClick={onOpenNewRecord}
-          className="px-4 py-2.5 bg-[#C6FF00] hover:bg-[#b0e600] text-[#0A0A0A] font-mono font-bold text-xs tracking-wider flex items-center justify-center gap-2 transition-colors cursor-pointer"
+          onClick={() => {
+            setClientName('');
+            setServiceType('trafego_pago');
+            setFormError(null);
+            setIsModalOpen(true);
+          }}
+          className="px-4 py-2 bg-[#C6FF00] hover:bg-[#b0e600] text-[#0A0A0A] font-mono font-bold text-xs tracking-wider flex items-center gap-1.5 transition-colors cursor-pointer self-start sm:self-auto"
         >
           <Plus className="w-4 h-4 stroke-[2.5]" />
-          <span>CADASTRAR NOVO CLIENTE</span>
+          <span>+ ADICIONAR CLIENTE</span>
         </button>
       </div>
 
-      {/* KPI Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-        <div className="bg-[#111111] border border-white/10 p-4">
-          <div className="text-[11px] font-mono text-white/40 uppercase mb-1">
-            Clientes Ativos
-          </div>
-          <div className="text-2xl font-bold font-mono text-white">
-            {clients.filter((c) => c.status === 'active').length} empresas
-          </div>
-          <div className="text-[11px] font-mono text-[#C6FF00] mt-1">
-            100% adimplentes
-          </div>
-        </div>
-
-        <div className="bg-[#111111] border border-white/10 p-4">
-          <div className="text-[11px] font-mono text-white/40 uppercase mb-1">
-            Recorrência Total (MRR)
-          </div>
-          <div className="text-2xl font-bold font-mono text-white">
-            R$ {totalMrr.toLocaleString('pt-BR')},00
-          </div>
-          <div className="text-[11px] font-mono text-white/50 mt-1">
-            Contratos mensais
-          </div>
-        </div>
-
-        <div className="bg-[#111111] border border-white/10 p-4">
-          <div className="text-[11px] font-mono text-white/40 uppercase mb-1">
-            Em Fase de Onboarding
-          </div>
-          <div className="text-2xl font-bold font-mono text-white">
-            {clients.filter((c) => c.status === 'onboarding').length} empresas
-          </div>
-          <div className="text-[11px] font-mono text-amber-400 mt-1">
-            Setup em andamento
-          </div>
-        </div>
-
-        <div className="bg-[#111111] border border-white/10 p-4">
-          <div className="text-[11px] font-mono text-white/40 uppercase mb-1">
-            LTV Médio Projetado
-          </div>
-          <div className="text-2xl font-bold font-mono text-white">
-            R$ 48.500,00
-          </div>
-          <div className="text-[11px] font-mono text-white/50 mt-1">
-            Tempo médio de retenção: 11 meses
-          </div>
-        </div>
-      </div>
-
-      {/* Main Content: List + Detail Split */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Clients List */}
-        <div className="lg:col-span-2 bg-[#111111] border border-white/10 flex flex-col">
-          <div className="p-4 border-b border-white/10 flex items-center justify-between gap-3">
-            <div className="relative flex-1">
-              <Search className="w-3.5 h-3.5 text-white/40 absolute left-3 top-2.5" />
-              <input
-                type="text"
-                placeholder="Filtrar clientes por nome, serviço ou e-mail..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="w-full bg-[#161616] border border-white/10 pl-9 pr-3 py-1.5 text-xs text-white placeholder-white/30 font-mono focus:border-[#C6FF00] focus:outline-none"
-              />
-            </div>
-          </div>
-
-          <div className="divide-y divide-white/5 overflow-y-auto max-h-[560px]">
-            {filtered.map((cli) => {
-              const isSelected = selectedClient?.id === cli.id;
-
-              return (
-                <div
-                  key={cli.id}
-                  onClick={() => setSelectedClient(cli)}
-                  className={`p-4 flex items-center justify-between cursor-pointer transition-colors ${
-                    isSelected
-                      ? 'bg-[#181818] border-l-2 border-[#C6FF00]'
-                      : 'hover:bg-white/[0.02] border-l-2 border-transparent'
-                  }`}
-                >
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <span className="font-mono text-sm font-bold text-white">
-                        {cli.companyName}
+      {/* Tabela de Clientes */}
+      <div className="bg-[#111111] border border-white/10 overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs font-mono">
+            <thead>
+              <tr className="border-b border-white/10 bg-[#0E0E0E] text-white/50 text-[10px] uppercase">
+                <th className="py-3 px-4">Cliente</th>
+                <th className="py-3 px-4">Serviço</th>
+                <th className="py-3 px-4">Adicionado por</th>
+                <th className="py-3 px-4">Data</th>
+                <th className="py-3 px-4 text-right">Ações</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-white/5">
+              {loading ? (
+                <tr>
+                  <td colSpan={5} className="py-8 text-center text-white/40">
+                    Carregando clientes...
+                  </td>
+                </tr>
+              ) : clients.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="py-8 text-center text-white/40">
+                    Nenhum cliente cadastrado.
+                  </td>
+                </tr>
+              ) : (
+                clients.map((client) => (
+                  <tr key={client.id} className="hover:bg-white/[0.02] transition-colors">
+                    <td className="py-3 px-4 font-bold text-white">{client.name}</td>
+                    <td className="py-3 px-4">
+                      <span className="px-2 py-0.5 bg-white/5 border border-white/10 text-white/80 text-[10px]">
+                        {getServiceLabel(client.service_type)}
                       </span>
-                      <span
-                        className={`text-[9px] font-mono px-1.5 py-0.2 uppercase font-bold ${
-                          cli.status === 'active'
-                            ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
-                            : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
-                        }`}
+                    </td>
+                    <td className="py-3 px-4 text-white/70">
+                      {getOperatorName(client.operator_id)}
+                    </td>
+                    <td className="py-3 px-4 text-white/50">
+                      {new Date(client.created_at).toLocaleDateString('pt-BR')}
+                    </td>
+                    <td className="py-3 px-4 text-right">
+                      <button
+                        onClick={() => setClientToDelete(client)}
+                        className="p-1.5 bg-rose-950/20 hover:bg-rose-950/50 text-rose-400 border border-rose-800/30 transition-colors cursor-pointer"
+                        title="Excluir cliente"
                       >
-                        {cli.status}
-                      </span>
-                    </div>
-
-                    <div className="text-xs text-white/60 font-sans">
-                      Contato: {cli.contactName} ({cli.phone})
-                    </div>
-
-                    <div className="flex flex-wrap gap-1 pt-1">
-                      {cli.services.map((srv, idx) => (
-                        <span
-                          key={idx}
-                          className="text-[10px] font-mono px-1.5 py-0.5 bg-[#202020] text-white/70"
-                        >
-                          {srv}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="text-right font-mono shrink-0 pl-3">
-                    <div className="text-xs font-bold text-white">
-                      {cli.monthlyRetainer > 0 ? (
-                        <>R$ {cli.monthlyRetainer.toLocaleString('pt-BR')}/mês</>
-                      ) : (
-                        <span className="text-white/40">Sob demanda</span>
-                      )}
-                    </div>
-                    <div className="text-[10px] text-white/40 uppercase">
-                      Resp: {cli.leadOwner}
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Selected Client Dossier */}
-        <div className="bg-[#111111] border border-white/10 p-5 flex flex-col justify-between">
-          {selectedClient ? (
-            <div className="space-y-4">
-              <div className="border-b border-white/10 pb-4">
-                <div className="text-[10px] font-mono text-[#C6FF00] uppercase mb-1">
-                  FICHA CADASTRAL // CLIENTE
-                </div>
-                <h3 className="font-mono text-base font-bold text-white">
-                  {selectedClient.companyName}
-                </h3>
-                {selectedClient.legalName && (
-                  <p className="text-[11px] text-white/40 font-mono">
-                    {selectedClient.legalName}
-                  </p>
-                )}
-              </div>
-
-              <div className="space-y-3 text-xs font-mono">
-                <div>
-                  <span className="text-white/40 block text-[10px] uppercase">
-                    Pessoa de Contato
-                  </span>
-                  <span className="text-white font-medium">
-                    {selectedClient.contactName}
-                  </span>
-                </div>
-
-                <div>
-                  <span className="text-white/40 block text-[10px] uppercase">
-                    Telefone & WhatsApp
-                  </span>
-                  <a
-                    href={`https://wa.me/${selectedClient.phone.replace(/\D/g, '')}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-[#C6FF00] hover:underline flex items-center gap-1.5"
-                  >
-                    <MessageCircle className="w-3.5 h-3.5" />
-                    <span>{selectedClient.phone}</span>
-                  </a>
-                </div>
-
-                <div>
-                  <span className="text-white/40 block text-[10px] uppercase">
-                    E-mail
-                  </span>
-                  <span className="text-white">{selectedClient.email}</span>
-                </div>
-
-                <div className="grid grid-cols-2 gap-2 pt-2 border-t border-white/10">
-                  <div>
-                    <span className="text-white/40 block text-[10px] uppercase">
-                      Retainer Mensal
-                    </span>
-                    <span className="text-white font-bold">
-                      R$ {selectedClient.monthlyRetainer.toLocaleString('pt-BR')},00
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-white/40 block text-[10px] uppercase">
-                      Setup Total Pago
-                    </span>
-                    <span className="text-white font-bold">
-                      R$ {selectedClient.setupPaid.toLocaleString('pt-BR')},00
-                    </span>
-                  </div>
-                </div>
-
-                <div>
-                  <span className="text-white/40 block text-[10px] uppercase">
-                    Data de Início
-                  </span>
-                  <span className="text-white">{selectedClient.startDate}</span>
-                </div>
-
-                {selectedClient.notes && (
-                  <div className="pt-2 border-t border-white/10">
-                    <span className="text-white/40 block text-[10px] uppercase mb-1">
-                      Anotações Estratégicas
-                    </span>
-                    <div className="p-3 bg-[#161616] border border-white/5 text-[11px] text-white/70 font-sans leading-relaxed">
-                      {selectedClient.notes}
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          ) : (
-            <div className="text-center text-white/30 text-xs font-mono py-12">
-              Selecione um cliente para visualizar os detalhes.
-            </div>
-          )}
-
-          {selectedClient && (
-            <div className="pt-4 border-t border-white/10">
-              <a
-                href={`https://wa.me/${selectedClient.phone.replace(/\D/g, '')}?text=${encodeURIComponent(
-                  `Olá, ${selectedClient.contactName}! Como estão os resultados da ${selectedClient.companyName}?`
-                )}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="w-full py-2.5 bg-[#181818] hover:bg-[#202020] border border-white/10 text-xs font-mono text-white text-center transition-colors cursor-pointer flex items-center justify-center gap-2"
-              >
-                <MessageCircle className="w-3.5 h-3.5 text-[#C6FF00]" />
-                <span>Iniciar Conversa no WhatsApp</span>
-              </a>
-            </div>
-          )}
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
         </div>
       </div>
+
+      {/* MODAL: ADICIONAR CLIENTE */}
+      {isModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm">
+          <div className="bg-[#111111] border border-white/20 w-full max-w-md p-5 space-y-4 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-white/10 pb-3">
+              <h3 className="font-mono text-sm font-bold text-white">
+                Adicionar Cliente
+              </h3>
+              <button
+                onClick={() => setIsModalOpen(false)}
+                className="text-white/40 hover:text-white p-1"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {formError && (
+              <div className="p-2.5 bg-rose-950/40 border border-rose-500/40 text-rose-300 text-xs font-mono">
+                {formError}
+              </div>
+            )}
+
+            <form onSubmit={handleSubmit} className="space-y-3 font-mono text-xs">
+              <div>
+                <label className="block text-white/60 mb-1">Nome do Cliente *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Ex: Omni Tech Solutions"
+                  value={clientName}
+                  onChange={(e) => setClientName(e.target.value)}
+                  className="w-full bg-[#161616] border border-white/10 px-3 py-2 text-white focus:outline-none focus:border-[#C6FF00]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-white/60 mb-1">Tipo de Serviço *</label>
+                <select
+                  value={serviceType}
+                  onChange={(e) => setServiceType(e.target.value as VultoClientServiceType)}
+                  className="w-full bg-[#161616] border border-white/10 px-3 py-2 text-white focus:outline-none focus:border-[#C6FF00] cursor-pointer"
+                >
+                  {SERVICE_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-white/10">
+                <button
+                  type="button"
+                  onClick={() => setIsModalOpen(false)}
+                  className="px-3 py-1.5 bg-white/5 text-white/70 hover:text-white"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="px-4 py-1.5 bg-[#C6FF00] hover:bg-[#b0e600] text-[#0A0A0A] font-bold"
+                >
+                  {isSubmitting ? 'Salvando...' : 'Salvar'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE CONFIRMAÇÃO DE EXCLUSÃO */}
+      {clientToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm">
+          <div className="bg-[#111111] border border-rose-500/40 w-full max-w-sm p-5 space-y-4 shadow-2xl">
+            <h3 className="font-mono text-sm font-bold text-white uppercase">
+              Confirmar Exclusão
+            </h3>
+            <p className="text-xs font-mono text-white/70">
+              Tem certeza que deseja excluir o cliente "{clientToDelete.name}"? Esta ação executará a remoção definitiva no banco.
+            </p>
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-white/10">
+              <button
+                type="button"
+                onClick={() => setClientToDelete(null)}
+                disabled={isDeleting}
+                className="px-3 py-1.5 bg-white/5 text-white/70 hover:text-white font-mono text-xs"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDelete}
+                disabled={isDeleting}
+                className="px-4 py-1.5 bg-rose-600 hover:bg-rose-700 text-white font-mono text-xs font-bold"
+              >
+                {isDeleting ? 'Excluindo...' : 'Sim, Excluir'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
