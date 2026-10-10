@@ -16,6 +16,7 @@ import {
   VultoFinanceItem,
   VultoMonthlyExpenseItem,
   VultoFinanceType,
+  SettlementStatus,
   VultoOperator,
   fetchVultoFinance,
   createVultoFinance,
@@ -28,9 +29,10 @@ import {
   fetchVultoOperators,
 } from '../../services/vultoCoreService';
 import { supabase } from '../../lib/supabase';
+import { ReceivablesView } from './ReceivablesView';
 
 export function FinanceView() {
-  const [activeTab, setActiveTab] = useState<'movimentacoes' | 'gastos_mensais'>('movimentacoes');
+  const [activeTab, setActiveTab] = useState<'movimentacoes' | 'contas_receber' | 'gastos_mensais'>('movimentacoes');
 
   // Estado Movimentações
   const [financeItems, setFinanceItems] = useState<VultoFinanceItem[]>([]);
@@ -50,6 +52,7 @@ export function FinanceView() {
   const [finDescription, setFinDescription] = useState('');
   const [finAmount, setFinAmount] = useState('');
   const [finType, setFinType] = useState<VultoFinanceType>('entrada');
+  const [finSettlement, setFinSettlement] = useState<SettlementStatus>('liquidado');
   const [isSubmittingFin, setIsSubmittingFin] = useState(false);
   const [finError, setFinError] = useState<string | null>(null);
 
@@ -144,6 +147,7 @@ export function FinanceView() {
     setFinDescription('');
     setFinAmount('');
     setFinType('entrada');
+    setFinSettlement('liquidado');
     setFinError(null);
     setIsFinModalOpen(true);
   };
@@ -154,6 +158,7 @@ export function FinanceView() {
     setFinDescription(item.description || '');
     setFinAmount(String(item.amount));
     setFinType(item.entry_type);
+    setFinSettlement(item.settlement_status || 'liquidado');
     setFinError(null);
     setIsFinModalOpen(true);
   };
@@ -180,6 +185,7 @@ export function FinanceView() {
           description: finDescription.trim() || null,
           amount: amountVal,
           entry_type: finType,
+          settlement_status: finType === 'entrada' ? finSettlement : 'liquidado',
         });
 
         if (res.error) {
@@ -194,12 +200,14 @@ export function FinanceView() {
                     description: finDescription.trim() || null,
                     amount: amountVal,
                     entry_type: finType,
+                    settlement_status: finType === 'entrada' ? finSettlement : 'liquidado',
                   }
                 : item
             )
           );
           setIsFinModalOpen(false);
           showToast('Movimentação atualizada.');
+          window.dispatchEvent(new CustomEvent('vulto:refresh'));
         }
       } else {
         const res = await createVultoFinance({
@@ -207,6 +215,7 @@ export function FinanceView() {
           description: finDescription.trim() || null,
           amount: amountVal,
           entry_type: finType,
+          settlement_status: finType === 'entrada' ? finSettlement : 'liquidado',
         });
 
         if (res.error) {
@@ -215,6 +224,7 @@ export function FinanceView() {
           setFinanceItems((prev) => [res.data!, ...prev]);
           setIsFinModalOpen(false);
           showToast('Movimentação adicionada.');
+          window.dispatchEvent(new CustomEvent('vulto:refresh'));
         }
       }
     } catch (err: any) {
@@ -335,6 +345,7 @@ export function FinanceView() {
           setFinanceItems((prev) => prev.filter((i) => i.id !== itemToDelete.id));
           showToast('Registro excluído.');
           setItemToDelete(null);
+          window.dispatchEvent(new CustomEvent('vulto:refresh'));
         }
       } else {
         const res = await deleteVultoMonthlyExpense(itemToDelete.id);
@@ -353,7 +364,6 @@ export function FinanceView() {
     }
   };
 
-  // Total de gastos mensais ativos
   const totalMonthlyExpenses = useMemo(() => {
     return monthlyExpenses
       .filter((e) => e.active)
@@ -380,19 +390,19 @@ export function FinanceView() {
         </div>
       )}
 
-      {/* Header com Abas */}
+      {/* Header com 3 Abas */}
       <div className="bg-[#111111] border border-white/10 p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-xl sm:text-2xl font-bold font-mono text-white">
             FINANCEIRO
           </h1>
           <p className="text-xs text-white/50 font-sans mt-0.5">
-            Gestão simplificada de entradas, saídas reais e despesas mensais recorrentes.
+            Gestão simplificada de entradas, contas a receber, saídas e despesas fixas mensais.
           </p>
         </div>
 
         {/* Abas */}
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <button
             onClick={() => setActiveTab('movimentacoes')}
             className={`px-4 py-2 font-mono text-xs font-bold tracking-wider transition-colors cursor-pointer border ${
@@ -402,6 +412,16 @@ export function FinanceView() {
             }`}
           >
             MOVIMENTAÇÕES
+          </button>
+          <button
+            onClick={() => setActiveTab('contas_receber')}
+            className={`px-4 py-2 font-mono text-xs font-bold tracking-wider transition-colors cursor-pointer border ${
+              activeTab === 'contas_receber'
+                ? 'bg-[#161616] text-[#C6FF00] border-[#C6FF00]'
+                : 'bg-transparent text-white/60 hover:text-white border-white/10'
+            }`}
+          >
+            CONTAS A RECEBER
           </button>
           <button
             onClick={() => setActiveTab('gastos_mensais')}
@@ -440,6 +460,7 @@ export function FinanceView() {
                 <thead>
                   <tr className="border-b border-white/10 bg-[#0E0E0E] text-white/50 text-[10px] uppercase">
                     <th className="py-3 px-4">Tipo</th>
+                    <th className="py-3 px-4">Status</th>
                     <th className="py-3 px-4">Título</th>
                     <th className="py-3 px-4">Descrição</th>
                     <th className="py-3 px-4">Operador</th>
@@ -451,77 +472,99 @@ export function FinanceView() {
                 <tbody className="divide-y divide-white/5">
                   {loadingFinance ? (
                     <tr>
-                      <td colSpan={7} className="py-8 text-center text-white/40">
+                      <td colSpan={8} className="py-8 text-center text-white/40">
                         Carregando movimentações...
                       </td>
                     </tr>
                   ) : financeItems.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="py-8 text-center text-white/40">
+                      <td colSpan={8} className="py-8 text-center text-white/40">
                         Nenhuma movimentação registrada.
                       </td>
                     </tr>
                   ) : (
-                    financeItems.map((item) => (
-                      <tr key={item.id} className="hover:bg-white/[0.02] transition-colors">
-                        <td className="py-3 px-4">
-                          <span
-                            className={`px-2 py-0.5 text-[10px] font-bold border uppercase ${
+                    financeItems.map((item) => {
+                      const isPend = item.entry_type === 'entrada' && item.settlement_status === 'pendente';
+                      return (
+                        <tr key={item.id} className="hover:bg-white/[0.02] transition-colors">
+                          <td className="py-3 px-4">
+                            <span
+                              className={`px-2 py-0.5 text-[10px] font-bold border uppercase ${
+                                item.entry_type === 'entrada'
+                                  ? 'bg-emerald-950/40 text-emerald-400 border-emerald-500/30'
+                                  : 'bg-rose-950/40 text-rose-400 border-rose-500/30'
+                              }`}
+                            >
+                              {item.entry_type}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4">
+                            {item.entry_type === 'entrada' ? (
+                              <span
+                                className={`px-2 py-0.5 text-[10px] font-bold border uppercase ${
+                                  isPend
+                                    ? 'bg-amber-950/40 text-amber-400 border-amber-500/30'
+                                    : 'bg-emerald-950/30 text-emerald-300 border-emerald-500/20'
+                                }`}
+                              >
+                                {isPend ? 'A receber' : 'Recebido'}
+                              </span>
+                            ) : (
+                              <span className="text-white/30">-</span>
+                            )}
+                          </td>
+                          <td className="py-3 px-4 font-bold text-white">{item.title}</td>
+                          <td className="py-3 px-4 text-white/60">
+                            {item.description || <span className="text-white/20">-</span>}
+                          </td>
+                          <td className="py-3 px-4 text-white/80">
+                            {getOperatorName(item.operator_id)}
+                          </td>
+                          <td className="py-3 px-4 text-white/50">
+                            {new Date(item.created_at).toLocaleDateString('pt-BR')}
+                          </td>
+                          <td
+                            className={`py-3 px-4 text-right font-bold ${
                               item.entry_type === 'entrada'
-                                ? 'bg-emerald-950/40 text-emerald-400 border-emerald-500/30'
-                                : 'bg-rose-950/40 text-rose-400 border-rose-500/30'
+                                ? isPend
+                                  ? 'text-amber-400'
+                                  : 'text-emerald-400'
+                                : 'text-rose-400'
                             }`}
                           >
-                            {item.entry_type}
-                          </span>
-                        </td>
-                        <td className="py-3 px-4 font-bold text-white">{item.title}</td>
-                        <td className="py-3 px-4 text-white/60">
-                          {item.description || <span className="text-white/20">-</span>}
-                        </td>
-                        <td className="py-3 px-4 text-white/80">
-                          {getOperatorName(item.operator_id)}
-                        </td>
-                        <td className="py-3 px-4 text-white/50">
-                          {new Date(item.created_at).toLocaleDateString('pt-BR')}
-                        </td>
-                        <td
-                          className={`py-3 px-4 text-right font-bold ${
-                            item.entry_type === 'entrada' ? 'text-emerald-400' : 'text-rose-400'
-                          }`}
-                        >
-                          {item.entry_type === 'entrada' ? '+' : '-'} R${' '}
-                          {Number(item.amount).toLocaleString('pt-BR', {
-                            minimumFractionDigits: 2,
-                            maximumFractionDigits: 2,
-                          })}
-                        </td>
-                        <td className="py-3 px-4 text-right">
-                          <div className="flex items-center justify-end gap-1.5">
-                            <button
-                              onClick={() => handleOpenEditFin(item)}
-                              className="p-1.5 bg-white/5 hover:bg-white/10 text-white/70 hover:text-[#C6FF00] transition-colors cursor-pointer"
-                              title="Editar"
-                            >
-                              <Edit2 className="w-3.5 h-3.5" />
-                            </button>
-                            <button
-                              onClick={() =>
-                                setItemToDelete({
-                                  id: item.id,
-                                  type: 'finance',
-                                  title: item.title,
-                                })
-                              }
-                              className="p-1.5 bg-rose-950/20 hover:bg-rose-950/50 text-rose-400 border border-rose-800/30 transition-colors cursor-pointer"
-                              title="Excluir"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))
+                            {item.entry_type === 'entrada' ? '+' : '-'} R${' '}
+                            {Number(item.amount).toLocaleString('pt-BR', {
+                              minimumFractionDigits: 2,
+                              maximumFractionDigits: 2,
+                            })}
+                          </td>
+                          <td className="py-3 px-4 text-right">
+                            <div className="flex items-center justify-end gap-1.5">
+                              <button
+                                onClick={() => handleOpenEditFin(item)}
+                                className="p-1.5 bg-white/5 hover:bg-white/10 text-white/70 hover:text-[#C6FF00] transition-colors cursor-pointer"
+                                title="Editar"
+                              >
+                                <Edit2 className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                onClick={() =>
+                                  setItemToDelete({
+                                    id: item.id,
+                                    type: 'finance',
+                                    title: item.title,
+                                  })
+                                }
+                                className="p-1.5 bg-rose-950/20 hover:bg-rose-950/50 text-rose-400 border border-rose-800/30 transition-colors cursor-pointer"
+                                title="Excluir"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })
                   )}
                 </tbody>
               </table>
@@ -531,7 +574,12 @@ export function FinanceView() {
       )}
 
       {/* ======================================================== */}
-      {/* ABA 2: GASTOS MENSAIS */}
+      {/* ABA 2: CONTAS A RECEBER */}
+      {/* ======================================================== */}
+      {activeTab === 'contas_receber' && <ReceivablesView />}
+
+      {/* ======================================================== */}
+      {/* ABA 3: GASTOS MENSAIS */}
       {/* ======================================================== */}
       {activeTab === 'gastos_mensais' && (
         <div className="space-y-4">
@@ -672,7 +720,10 @@ export function FinanceView() {
                 <div className="grid grid-cols-2 gap-2">
                   <button
                     type="button"
-                    onClick={() => setFinType('entrada')}
+                    onClick={() => {
+                      setFinType('entrada');
+                      setFinSettlement('liquidado');
+                    }}
                     className={`py-2 border font-bold transition-colors cursor-pointer ${
                       finType === 'entrada'
                         ? 'bg-emerald-950/50 text-emerald-400 border-emerald-500'
@@ -683,7 +734,10 @@ export function FinanceView() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => setFinType('saida')}
+                    onClick={() => {
+                      setFinType('saida');
+                      setFinSettlement('liquidado');
+                    }}
                     className={`py-2 border font-bold transition-colors cursor-pointer ${
                       finType === 'saida'
                         ? 'bg-rose-950/50 text-rose-400 border-rose-500'
@@ -694,6 +748,37 @@ export function FinanceView() {
                   </button>
                 </div>
               </div>
+
+              {/* Se for entrada, permitir selecionar Status (Recebido / A receber) */}
+              {finType === 'entrada' && (
+                <div>
+                  <label className="block text-white/60 mb-1">Status do Recebimento *</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setFinSettlement('liquidado')}
+                      className={`py-2 border font-bold transition-colors cursor-pointer ${
+                        finSettlement === 'liquidado'
+                          ? 'bg-emerald-950/50 text-emerald-400 border-emerald-500'
+                          : 'bg-[#161616] text-white/40 border-white/10'
+                      }`}
+                    >
+                      Recebido
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setFinSettlement('pendente')}
+                      className={`py-2 border font-bold transition-colors cursor-pointer ${
+                        finSettlement === 'pendente'
+                          ? 'bg-amber-950/50 text-amber-400 border-amber-500'
+                          : 'bg-[#161616] text-white/40 border-white/10'
+                      }`}
+                    >
+                      A receber
+                    </button>
+                  </div>
+                </div>
+              )}
 
               <div>
                 <label className="block text-white/60 mb-1">Título *</label>

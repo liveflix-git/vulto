@@ -12,6 +12,7 @@ export interface VultoOperator {
 }
 
 export type VultoFinanceType = 'entrada' | 'saida';
+export type SettlementStatus = 'liquidado' | 'pendente';
 
 export interface VultoFinanceItem {
   id: string;
@@ -19,6 +20,7 @@ export interface VultoFinanceItem {
   description: string | null;
   amount: number;
   entry_type: VultoFinanceType;
+  settlement_status?: SettlementStatus;
   operator_id: string | null;
   operator_name?: string;
   created_at: string;
@@ -138,7 +140,6 @@ export function clearActiveOperatorSession() {
 
 /**
  * Busca os operadores da tabela vulto_operators.
- * Se a tabela estiver vazia, tenta criar Felipe e Pietro ou retorna o fallback.
  */
 export async function fetchVultoOperators(): Promise<VultoOperator[]> {
   if (isSupabaseConfigured) {
@@ -152,10 +153,9 @@ export async function fetchVultoOperators(): Promise<VultoOperator[]> {
         return data as VultoOperator[];
       }
 
-      // Se data estiver vazia, tentar inserir os 2 sócios
       if (!error && data && data.length === 0) {
         try {
-          const { data: inserted, error: insertErr } = await supabase
+          const { data: inserted } = await supabase
             .from('vulto_operators')
             .insert([
               { name: 'Felipe', active: true },
@@ -163,12 +163,10 @@ export async function fetchVultoOperators(): Promise<VultoOperator[]> {
             ])
             .select();
 
-          if (!insertErr && inserted && inserted.length > 0) {
+          if (inserted && inserted.length > 0) {
             return inserted as VultoOperator[];
           }
-        } catch (e) {
-          // Fallback seguro
-        }
+        } catch (e) {}
       }
     } catch (e) {
       console.warn('Erro ao buscar vulto_operators:', e);
@@ -238,7 +236,11 @@ export async function fetchVultoFinance(): Promise<{ data: VultoFinanceItem[]; e
       .order('created_at', { ascending: false });
 
     if (error) return { data: [], error: error.message };
-    return { data: (data || []) as VultoFinanceItem[], error: null };
+    const mapped = (data || []).map((item: any) => ({
+      ...item,
+      settlement_status: item.settlement_status || (item.entry_type === 'entrada' ? 'liquidado' : 'liquidado'),
+    }));
+    return { data: mapped as VultoFinanceItem[], error: null };
   } catch (e: any) {
     return { data: [], error: e.message || 'Erro ao carregar financeiro' };
   }
@@ -249,13 +251,17 @@ export async function createVultoFinance(payload: {
   description?: string | null;
   amount: number;
   entry_type: VultoFinanceType;
+  settlement_status?: SettlementStatus;
 }): Promise<{ data: VultoFinanceItem | null; error: string | null }> {
   const op = getActiveOperatorSession();
+  const settlement = payload.entry_type === 'entrada' ? (payload.settlement_status || 'liquidado') : 'liquidado';
+
   const insertPayload = {
     title: payload.title.trim(),
     description: payload.description?.trim() || null,
     amount: Number(payload.amount),
     entry_type: payload.entry_type,
+    settlement_status: settlement,
     operator_id: op?.id || null,
   };
 
@@ -268,14 +274,27 @@ export async function createVultoFinance(payload: {
 
     if (error) return { data: null, error: error.message };
 
+    const actionName =
+      payload.entry_type === 'entrada'
+        ? settlement === 'pendente'
+          ? 'finance_receivable_created'
+          : 'Adicionou Entrada'
+        : 'Adicionou Saída';
+
     await logVultoAudit({
-      action: payload.entry_type === 'entrada' ? 'Adicionou Entrada' : 'Adicionou Saída',
+      action: actionName,
       entity_type: 'vulto_finance',
       entity_id: data.id,
-      details: `${op?.name || 'Operador'} adicionou ${payload.entry_type}: ${payload.title} (R$ ${payload.amount.toLocaleString('pt-BR')})`,
+      details: `${op?.name || 'Operador'} adicionou ${payload.entry_type} (${settlement}): ${payload.title} (R$ ${payload.amount.toLocaleString('pt-BR')})`,
     });
 
-    return { data: data as VultoFinanceItem, error: null };
+    return {
+      data: {
+        ...(data as any),
+        settlement_status: settlement,
+      },
+      error: null,
+    };
   } catch (e: any) {
     return { data: null, error: e.message || 'Erro ao criar movimentação' };
   }
@@ -288,6 +307,7 @@ export async function updateVultoFinance(
     description?: string | null;
     amount?: number;
     entry_type?: VultoFinanceType;
+    settlement_status?: SettlementStatus;
   }
 ): Promise<{ success: boolean; error: string | null }> {
   const op = getActiveOperatorSession();
@@ -298,6 +318,7 @@ export async function updateVultoFinance(
   if (updates.description !== undefined) payload.description = updates.description?.trim() || null;
   if (updates.amount !== undefined) payload.amount = Number(updates.amount);
   if (updates.entry_type !== undefined) payload.entry_type = updates.entry_type;
+  if (updates.settlement_status !== undefined) payload.settlement_status = updates.settlement_status;
 
   try {
     const { error } = await supabase
@@ -526,7 +547,6 @@ export async function deleteVultoClient(id: string): Promise<{ success: boolean;
       .eq('id', id);
 
     if (error) {
-      console.error('Erro retornado pelo Supabase ao excluir cliente:', error);
       return { success: false, error: error.message };
     }
 
@@ -608,7 +628,7 @@ export async function toggleVultoTask(
   try {
     const { error } = await supabase
       .from('vulto_tasks')
-      .update({ completed, completed_at, updated_at })
+      .update({ completed, completed_at, updated_at, operator_id: op?.id || null })
       .eq('id', id);
 
     if (error) return { success: false, error: error.message };
@@ -631,7 +651,7 @@ export async function updateVultoTask(
   updates: { title?: string; notes?: string | null }
 ): Promise<{ success: boolean; error: string | null }> {
   const op = getActiveOperatorSession();
-  const payload: any = { updated_at: new Date().toISOString() };
+  const payload: any = { updated_at: new Date().toISOString(), operator_id: op?.id || null };
   if (updates.title !== undefined) payload.title = updates.title.trim();
   if (updates.notes !== undefined) payload.notes = updates.notes?.trim() || null;
 
@@ -742,7 +762,7 @@ export async function updateVultoSalesScript(
   }
 ): Promise<{ success: boolean; error: string | null }> {
   const op = getActiveOperatorSession();
-  const payload: any = { updated_at: new Date().toISOString() };
+  const payload: any = { updated_at: new Date().toISOString(), operator_id: op?.id || null };
   if (updates.title !== undefined) payload.title = updates.title.trim();
   if (updates.channel !== undefined) payload.channel = updates.channel;
   if (updates.content !== undefined) payload.content = updates.content;
@@ -854,7 +874,7 @@ export async function updateVultoInventoryItem(
   }
 ): Promise<{ success: boolean; error: string | null }> {
   const op = getActiveOperatorSession();
-  const payload: any = { updated_at: new Date().toISOString() };
+  const payload: any = { updated_at: new Date().toISOString(), operator_id: op?.id || null };
   if (updates.name !== undefined) payload.name = updates.name.trim();
   if (updates.quantity !== undefined) payload.quantity = Math.max(0, Number(updates.quantity) || 0);
   if (updates.notes !== undefined) payload.notes = updates.notes?.trim() || null;
@@ -910,8 +930,6 @@ export async function deleteVultoInventoryItem(id: string): Promise<{ success: b
 export async function formatOperationalData(): Promise<{ success: boolean; error: string | null }> {
   const op = getActiveOperatorSession();
   try {
-    // Apaga apenas dados operacionais em ordem segura
-    // NÃO apaga vulto_operators nem usuários nem configs
     await Promise.all([
       supabase.from('vulto_finance').delete().neq('id', '00000000-0000-0000-0000-000000000000'),
       supabase.from('vulto_monthly_expenses').delete().neq('id', '00000000-0000-0000-0000-000000000000'),
@@ -919,6 +937,8 @@ export async function formatOperationalData(): Promise<{ success: boolean; error
       supabase.from('vulto_tasks').delete().neq('id', '00000000-0000-0000-0000-000000000000'),
       supabase.from('vulto_sales_scripts').delete().neq('id', '00000000-0000-0000-0000-000000000000'),
       supabase.from('vulto_inventory').delete().neq('id', '00000000-0000-0000-0000-000000000000'),
+      supabase.from('vulto_monthly_goals').delete().neq('id', '00000000-0000-0000-0000-000000000000'),
+      supabase.from('vulto_price_table').delete().neq('id', '00000000-0000-0000-0000-000000000000'),
       supabase.from('vulto_audit_logs').delete().neq('id', '00000000-0000-0000-0000-000000000000'),
     ]);
 

@@ -10,6 +10,7 @@ import {
   Calendar,
   Layers,
   RefreshCw,
+  Clock,
 } from 'lucide-react';
 import {
   VultoFinanceItem,
@@ -92,17 +93,25 @@ export function OverviewView({ onNavigateTab }: OverviewViewProps) {
     };
   }, []);
 
-  // Cálculos do mês atual
-  const { monthEntradas, monthSaidas, monthSaldo, fixedExpensesTotal, pendingTasksCount } = useMemo(() => {
+  // Cálculos do mês atual e Contas a Receber
+  const { monthEntradas, monthSaidas, monthSaldo, fixedExpensesTotal, pendingTasksCount, receivablesTotal, receivablesCount } = useMemo(() => {
     const now = new Date();
     const currentMonthPrefix = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 
     let entradas = 0;
     let saidas = 0;
+    let recTotal = 0;
+    let recCount = 0;
 
     financeItems.forEach((item) => {
+      const isPend = item.entry_type === 'entrada' && item.settlement_status === 'pendente';
+      if (isPend) {
+        recTotal += Number(item.amount || 0);
+        recCount += 1;
+      }
+
       if (item.created_at?.startsWith(currentMonthPrefix)) {
-        if (item.entry_type === 'entrada') {
+        if (item.entry_type === 'entrada' && (!item.settlement_status || item.settlement_status === 'liquidado')) {
           entradas += Number(item.amount || 0);
         } else if (item.entry_type === 'saida') {
           saidas += Number(item.amount || 0);
@@ -122,6 +131,8 @@ export function OverviewView({ onNavigateTab }: OverviewViewProps) {
       monthSaldo: entradas - saidas,
       fixedExpensesTotal: fixedTotal,
       pendingTasksCount: pendingTasks,
+      receivablesTotal: recTotal,
+      receivablesCount: recCount,
     };
   }, [financeItems, monthlyExpenses, tasks]);
 
@@ -139,47 +150,62 @@ export function OverviewView({ onNavigateTab }: OverviewViewProps) {
             VISÃO GERAL
           </h1>
           <p className="text-xs text-white/50 font-sans mt-0.5">
-            Acompanhamento central de fluxo, despesas e entregas operacionais.
+            Acompanhamento central de fluxo, contas a receber, despesas e entregas operacionais.
           </p>
         </div>
       </div>
 
-      {/* Cards de Métricas Principais */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+      {/* Cards de Métricas Principais (7 cards) */}
+      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
         {/* ENTRADAS DO MÊS */}
         <div className="bg-[#111111] border border-white/10 p-4 space-y-1">
           <div className="text-[10px] font-mono text-white/40 uppercase">Entradas do Mês</div>
-          <div className="text-lg sm:text-xl font-bold font-mono text-emerald-400">
+          <div className="text-base sm:text-lg font-bold font-mono text-emerald-400">
             R$ {monthEntradas.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </div>
-          <div className="text-[10px] font-mono text-white/30">Mês corrente</div>
+          <div className="text-[10px] font-mono text-white/35">Mês corrente (realizado)</div>
+        </div>
+
+        {/* CONTAS A RECEBER */}
+        <div
+          onClick={() => onNavigateTab('finance')}
+          className="bg-[#111111] border border-white/10 hover:border-white/20 p-4 space-y-1 cursor-pointer transition-colors"
+        >
+          <div className="text-[10px] font-mono text-white/40 uppercase">Contas a Receber</div>
+          <div className="text-base sm:text-lg font-bold font-mono text-amber-400">
+            R$ {receivablesTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </div>
+          <div className="text-[10px] font-mono text-amber-400/90 flex items-center gap-1">
+            <span>{receivablesCount} {receivablesCount === 1 ? 'recebimento' : 'recebimentos'}</span>
+            <ArrowUpRight className="w-3 h-3" />
+          </div>
         </div>
 
         {/* SAÍDAS DO MÊS */}
         <div className="bg-[#111111] border border-white/10 p-4 space-y-1">
           <div className="text-[10px] font-mono text-white/40 uppercase">Saídas do Mês</div>
-          <div className="text-lg sm:text-xl font-bold font-mono text-rose-400">
+          <div className="text-base sm:text-lg font-bold font-mono text-rose-400">
             R$ {monthSaidas.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </div>
-          <div className="text-[10px] font-mono text-white/30">Realizadas</div>
+          <div className="text-[10px] font-mono text-white/35">Realizadas</div>
         </div>
 
         {/* SALDO DO MÊS */}
         <div className="bg-[#111111] border border-white/10 p-4 space-y-1">
           <div className="text-[10px] font-mono text-white/40 uppercase">Saldo do Mês</div>
-          <div className={`text-lg sm:text-xl font-bold font-mono ${monthSaldo >= 0 ? 'text-[#C6FF00]' : 'text-rose-400'}`}>
+          <div className={`text-base sm:text-lg font-bold font-mono ${monthSaldo >= 0 ? 'text-[#C6FF00]' : 'text-rose-400'}`}>
             R$ {monthSaldo.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </div>
-          <div className="text-[10px] font-mono text-white/30">Entradas - Saídas</div>
+          <div className="text-[10px] font-mono text-white/35">Entradas - Saídas</div>
         </div>
 
         {/* GASTOS MENSAIS FIXOS */}
         <div className="bg-[#111111] border border-white/10 p-4 space-y-1">
           <div className="text-[10px] font-mono text-white/40 uppercase">Gastos Mensais Fixos</div>
-          <div className="text-lg sm:text-xl font-bold font-mono text-white">
+          <div className="text-base sm:text-lg font-bold font-mono text-white">
             R$ {fixedExpensesTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </div>
-          <div className="text-[10px] font-mono text-white/30">Ativos cadastrados</div>
+          <div className="text-[10px] font-mono text-white/35">Ativos cadastrados</div>
         </div>
 
         {/* CLIENTES */}
@@ -188,7 +214,7 @@ export function OverviewView({ onNavigateTab }: OverviewViewProps) {
           className="bg-[#111111] border border-white/10 hover:border-white/20 p-4 space-y-1 cursor-pointer transition-colors"
         >
           <div className="text-[10px] font-mono text-white/40 uppercase">Clientes</div>
-          <div className="text-lg sm:text-xl font-bold font-mono text-white">
+          <div className="text-base sm:text-lg font-bold font-mono text-white">
             {clients.length}
           </div>
           <div className="text-[10px] font-mono text-[#C6FF00] flex items-center gap-1">
@@ -203,7 +229,7 @@ export function OverviewView({ onNavigateTab }: OverviewViewProps) {
           className="bg-[#111111] border border-white/10 hover:border-white/20 p-4 space-y-1 cursor-pointer transition-colors"
         >
           <div className="text-[10px] font-mono text-white/40 uppercase">Tarefas Pendentes</div>
-          <div className="text-lg sm:text-xl font-bold font-mono text-white">
+          <div className="text-base sm:text-lg font-bold font-mono text-white">
             {pendingTasksCount}
           </div>
           <div className="text-[10px] font-mono text-[#C6FF00] flex items-center gap-1">
@@ -238,51 +264,67 @@ export function OverviewView({ onNavigateTab }: OverviewViewProps) {
           </div>
         ) : (
           <div className="divide-y divide-white/5">
-            {recentMovements.map((item) => (
-              <div
-                key={item.id}
-                className="py-3 flex items-center justify-between text-xs font-mono"
-              >
-                <div className="flex items-center gap-3">
-                  <div
-                    className={`w-7 h-7 flex items-center justify-center border ${
-                      item.entry_type === 'entrada'
-                        ? 'border-emerald-500/30 text-emerald-400 bg-emerald-950/20'
-                        : 'border-rose-500/30 text-rose-400 bg-rose-950/20'
-                    }`}
-                  >
-                    {item.entry_type === 'entrada' ? (
-                      <ArrowDownLeft className="w-3.5 h-3.5" />
-                    ) : (
-                      <ArrowUpRight className="w-3.5 h-3.5" />
-                    )}
+            {recentMovements.map((item) => {
+              const isPend = item.entry_type === 'entrada' && item.settlement_status === 'pendente';
+              return (
+                <div
+                  key={item.id}
+                  className="py-3 flex items-center justify-between text-xs font-mono"
+                >
+                  <div className="flex items-center gap-3">
+                    <div
+                      className={`w-7 h-7 flex items-center justify-center border ${
+                        item.entry_type === 'entrada'
+                          ? isPend
+                            ? 'border-amber-500/30 text-amber-400 bg-amber-950/20'
+                            : 'border-emerald-500/30 text-emerald-400 bg-emerald-950/20'
+                          : 'border-rose-500/30 text-rose-400 bg-rose-950/20'
+                      }`}
+                    >
+                      {item.entry_type === 'entrada' ? (
+                        <ArrowDownLeft className="w-3.5 h-3.5" />
+                      ) : (
+                        <ArrowUpRight className="w-3.5 h-3.5" />
+                      )}
+                    </div>
+                    <div>
+                      <div className="font-bold text-white flex items-center gap-2">
+                        <span>{item.title}</span>
+                        {isPend && (
+                          <span className="px-1.5 py-0.2 bg-amber-950/50 text-amber-300 border border-amber-500/30 text-[9px]">
+                            A receber
+                          </span>
+                        )}
+                      </div>
+                      {item.description && (
+                        <div className="text-[11px] text-white/50">{item.description}</div>
+                      )}
+                    </div>
                   </div>
-                  <div>
-                    <div className="font-bold text-white">{item.title}</div>
-                    {item.description && (
-                      <div className="text-[11px] text-white/50">{item.description}</div>
-                    )}
-                  </div>
-                </div>
 
-                <div className="text-right">
-                  <div
-                    className={`font-bold ${
-                      item.entry_type === 'entrada' ? 'text-emerald-400' : 'text-rose-400'
-                    }`}
-                  >
-                    {item.entry_type === 'entrada' ? '+' : '-'} R${' '}
-                    {Number(item.amount).toLocaleString('pt-BR', {
-                      minimumFractionDigits: 2,
-                      maximumFractionDigits: 2,
-                    })}
-                  </div>
-                  <div className="text-[10px] text-white/30">
-                    {new Date(item.created_at).toLocaleDateString('pt-BR')}
+                  <div className="text-right">
+                    <div
+                      className={`font-bold ${
+                        item.entry_type === 'entrada'
+                          ? isPend
+                            ? 'text-amber-400'
+                            : 'text-emerald-400'
+                          : 'text-rose-400'
+                      }`}
+                    >
+                      {item.entry_type === 'entrada' ? '+' : '-'} R${' '}
+                      {Number(item.amount).toLocaleString('pt-BR', {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      })}
+                    </div>
+                    <div className="text-[10px] text-white/35">
+                      {new Date(item.created_at).toLocaleDateString('pt-BR')}
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
