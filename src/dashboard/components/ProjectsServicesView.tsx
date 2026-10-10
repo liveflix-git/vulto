@@ -30,7 +30,7 @@ import {
   deleteVultoSalesScript,
   fetchVultoOperators,
 } from '../../services/vultoCoreService';
-import { supabase } from '../../lib/supabase';
+import { supabase } from '../../lib/supabase.ts';
 
 export function ProjectsServicesView() {
   const [activeTab, setActiveTab] = useState<'tasks' | 'scripts'>('tasks');

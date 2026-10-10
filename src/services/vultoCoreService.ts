@@ -1,4 +1,4 @@
-import { supabase, isSupabaseConfigured } from '../lib/supabase';
+import { supabase, isSupabaseConfigured } from '../lib/supabase.ts';
 
 // =====================================================================
 // TIPOS EXATOS DAS TABELAS VULTO_*
