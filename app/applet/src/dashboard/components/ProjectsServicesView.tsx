@@ -378,6 +378,7 @@ export function ProjectsServicesView() {
         });
         if (res.error) {
           setPriceError(res.error);
+          showToast('Erro ao atualizar serviço.', 'error');
         } else {
           setPrices((prev) =>
             prev.map((p) =>
@@ -407,6 +408,7 @@ export function ProjectsServicesView() {
         });
         if (res.error) {
           setPriceError(res.error);
+          showToast('Erro ao cadastrar serviço.', 'error');
         } else if (res.data) {
           setPrices((prev) => [res.data!, ...prev]);
           setIsPriceModalOpen(false);
@@ -415,6 +417,7 @@ export function ProjectsServicesView() {
       }
     } catch (err: any) {
       setPriceError(err.message || 'Erro inesperado.');
+      showToast('Erro inesperado.', 'error');
     } finally {
       setIsSubmittingPrice(false);
     }
@@ -510,7 +513,7 @@ export function ProjectsServicesView() {
             PROJETOS & SERVIÇOS
           </h1>
           <p className="text-xs text-white/50 font-sans mt-0.5">
-            Checklist operacional de entregas, repositório de scripts comerciais e tabela de preços.
+            Checklist operacional de entregas e repositório de scripts comerciais.
           </p>
         </div>
 
@@ -764,16 +767,21 @@ export function ProjectsServicesView() {
       {/* ======================================================== */}
       {activeTab === 'pricing' && (
         <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-mono text-white/50 uppercase">
-              Serviços e Tabela de Preços Ativos
-            </span>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-mono font-bold text-white uppercase tracking-wider">
+                TABELA COMERCIAL
+              </h2>
+              <p className="text-xs text-white/50 font-sans mt-0.5">
+                Valores oficiais, pisos comerciais e serviços da VULTO LAB.
+              </p>
+            </div>
             <button
               onClick={handleOpenNewPrice}
               className="px-4 py-2 bg-[#C6FF00] hover:bg-[#b0e600] text-[#0A0A0A] font-mono font-bold text-xs tracking-wider flex items-center gap-1.5 transition-colors cursor-pointer"
             >
               <Plus className="w-4 h-4 stroke-[2.5]" />
-              <span>+ ADICIONAR SERVIÇO</span>
+              <span>+ NOVO SERVIÇO</span>
             </button>
           </div>
 
@@ -782,32 +790,31 @@ export function ProjectsServicesView() {
               <table className="w-full text-left text-xs font-mono">
                 <thead>
                   <tr className="border-b border-white/10 bg-[#0E0E0E] text-white/50 text-[10px] uppercase">
-                    <th className="py-3 px-4">Nome do Serviço</th>
-                    <th className="py-3 px-4">Descrição</th>
-                    <th className="py-3 px-4">Preço</th>
-                    <th className="py-3 px-4">Cobrança</th>
                     <th className="py-3 px-4">Status</th>
-                    <th className="py-3 px-4">Responsável</th>
+                    <th className="py-3 px-4">Serviço</th>
+                    <th className="py-3 px-4">Descrição</th>
+                    <th className="py-3 px-4">Valor</th>
+                    <th className="py-3 px-4">Cobrança</th>
                     <th className="py-3 px-4 text-right">Ações</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-white/5">
                   {loadingPrices ? (
                     <tr>
-                      <td colSpan={7} className="py-8 text-center text-white/40">
+                      <td colSpan={6} className="py-8 text-center text-white/40">
                         Carregando tabela de preços...
                       </td>
                     </tr>
                   ) : prices.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="py-8 text-center text-white/40 space-y-3">
-                        <div>Nenhum preço cadastrado.</div>
+                      <td colSpan={6} className="py-12 text-center text-white/40 space-y-3">
+                        <div className="font-bold uppercase tracking-wider">NENHUM PREÇO CADASTRADO</div>
                         <button
                           onClick={handleOpenNewPrice}
-                          className="px-3 py-1.5 bg-[#C6FF00] text-[#0A0A0A] font-bold text-xs inline-flex items-center gap-1 cursor-pointer"
+                          className="px-4 py-2 bg-[#C6FF00] text-[#0A0A0A] font-bold text-xs inline-flex items-center gap-1.5 cursor-pointer"
                         >
-                          <Plus className="w-3.5 h-3.5" />
-                          <span>Adicionar serviço</span>
+                          <Plus className="w-4 h-4" />
+                          <span>+ NOVO SERVIÇO</span>
                         </button>
                       </td>
                     </tr>
@@ -817,17 +824,10 @@ export function ProjectsServicesView() {
                         style: 'currency',
                         currency: 'BRL',
                       });
-                      const displayPrice = item.billing_type === 'mensal' ? `${formattedPrice}/mês` : formattedPrice;
+                      const billingLabel = item.billing_type === 'mensal' ? 'MENSAL' : 'PAGAMENTO ÚNICO';
+                      const displayPrice = item.billing_type === 'mensal' ? `${formattedPrice} / MÊS` : formattedPrice;
                       return (
                         <tr key={item.id} className="hover:bg-white/[0.02] transition-colors">
-                          <td className="py-3 px-4 font-bold text-white">{item.service_name}</td>
-                          <td className="py-3 px-4 text-white/60 max-w-xs truncate">
-                            {item.description || <span className="text-white/20">-</span>}
-                          </td>
-                          <td className="py-3 px-4 text-[#C6FF00] font-bold">{displayPrice}</td>
-                          <td className="py-3 px-4 text-white/70">
-                            {item.billing_type === 'mensal' ? 'Mensal' : 'Pagamento único'}
-                          </td>
                           <td className="py-3 px-4">
                             <button
                               onClick={() => handleTogglePriceActive(item)}
@@ -837,10 +837,15 @@ export function ProjectsServicesView() {
                                   : 'bg-white/5 text-white/40 border-white/10 hover:bg-white/10'
                               }`}
                             >
-                              {item.active ? 'Ativo' : 'Inativo'}
+                              {item.active ? 'ATIVO' : 'INATIVO'}
                             </button>
                           </td>
-                          <td className="py-3 px-4 text-white/60">{getOperatorName(item.operator_id)}</td>
+                          <td className="py-3 px-4 font-bold text-white">{item.service_name}</td>
+                          <td className="py-3 px-4 text-white/60 max-w-xs truncate">
+                            {item.description || <span className="text-white/20">-</span>}
+                          </td>
+                          <td className="py-3 px-4 text-[#C6FF00] font-bold">{displayPrice}</td>
+                          <td className="py-3 px-4 text-white/70">{billingLabel}</td>
                           <td className="py-3 px-4 text-right">
                             <div className="flex items-center justify-end gap-1.5">
                               <button
@@ -1026,12 +1031,12 @@ export function ProjectsServicesView() {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm">
           <div className="bg-[#111111] border border-white/20 w-full max-w-md p-5 space-y-4 shadow-2xl">
             <div className="flex items-center justify-between border-b border-white/10 pb-3">
-              <h3 className="font-mono text-sm font-bold text-white">
-                {editingPrice ? 'Editar Serviço / Preço' : 'Adicionar Serviço'}
+              <h3 className="font-mono text-sm font-bold text-white uppercase">
+                {editingPrice ? 'Editar Serviço' : 'Novo Serviço'}
               </h3>
               <button
                 onClick={() => setIsPriceModalOpen(false)}
-                className="text-white/40 hover:text-white p-1"
+                className="text-white/40 hover:text-white p-1 cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -1043,18 +1048,18 @@ export function ProjectsServicesView() {
             )}
             <form onSubmit={handleSubmitPrice} className="space-y-3 font-mono text-xs">
               <div>
-                <label className="block text-white/60 mb-1">Nome do Serviço *</label>
+                <label className="block text-white/60 mb-1">NOME DO SERVIÇO *</label>
                 <input
                   type="text"
                   required
-                  placeholder="Ex: Site VULTO ou Gestão de Tráfego"
+                  placeholder="Ex: VULTO Site"
                   value={priceServiceName}
                   onChange={(e) => setPriceServiceName(e.target.value)}
                   className="w-full bg-[#161616] border border-white/10 px-3 py-2 text-white focus:outline-none focus:border-[#C6FF00]"
                 />
               </div>
               <div>
-                <label className="block text-white/60 mb-1">Descrição</label>
+                <label className="block text-white/60 mb-1">DESCRIÇÃO</label>
                 <input
                   type="text"
                   placeholder="Ex: Criação de site profissional com painel"
@@ -1065,20 +1070,20 @@ export function ProjectsServicesView() {
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-white/60 mb-1">Preço (R$) *</label>
+                  <label className="block text-white/60 mb-1">PREÇO (R$) *</label>
                   <input
                     type="number"
                     step="0.01"
                     min="0"
                     required
-                    placeholder="697"
+                    placeholder="797"
                     value={priceValue}
                     onChange={(e) => setPriceValue(e.target.value)}
                     className="w-full bg-[#161616] border border-white/10 px-3 py-2 text-white focus:outline-none focus:border-[#C6FF00]"
                   />
                 </div>
                 <div>
-                  <label className="block text-white/60 mb-1">Tipo de Cobrança *</label>
+                  <label className="block text-white/60 mb-1">TIPO DE COBRANÇA *</label>
                   <select
                     value={priceBillingType}
                     onChange={(e) => setPriceBillingType(e.target.value as VultoBillingType)}
@@ -1105,14 +1110,14 @@ export function ProjectsServicesView() {
                 <button
                   type="button"
                   onClick={() => setIsPriceModalOpen(false)}
-                  className="px-3 py-1.5 bg-white/5 text-white/70 hover:text-white"
+                  className="px-3 py-1.5 bg-white/5 text-white/70 hover:text-white cursor-pointer"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
                   disabled={isSubmittingPrice}
-                  className="px-4 py-1.5 bg-[#C6FF00] hover:bg-[#b0e600] text-[#0A0A0A] font-bold"
+                  className="px-4 py-1.5 bg-[#C6FF00] hover:bg-[#b0e600] text-[#0A0A0A] font-bold cursor-pointer"
                 >
                   {isSubmittingPrice ? 'Salvando...' : 'Salvar'}
                 </button>
@@ -1137,7 +1142,7 @@ export function ProjectsServicesView() {
                 type="button"
                 onClick={() => setItemToDelete(null)}
                 disabled={isDeleting}
-                className="px-3 py-1.5 bg-white/5 text-white/70 hover:text-white font-mono text-xs"
+                className="px-3 py-1.5 bg-white/5 text-white/70 hover:text-white font-mono text-xs cursor-pointer"
               >
                 Cancelar
               </button>
@@ -1145,7 +1150,7 @@ export function ProjectsServicesView() {
                 type="button"
                 onClick={handleConfirmDelete}
                 disabled={isDeleting}
-                className="px-4 py-1.5 bg-rose-600 hover:bg-rose-700 text-white font-mono text-xs font-bold"
+                className="px-4 py-1.5 bg-rose-600 hover:bg-rose-700 text-white font-mono text-xs font-bold cursor-pointer"
               >
                 {isDeleting ? 'Excluindo...' : 'Sim, Excluir'}
               </button>
