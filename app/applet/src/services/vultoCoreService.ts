@@ -86,6 +86,7 @@ export interface VultoInventoryItem {
   created_at: string;
   updated_at: string;
 }
+
 export type VultoBillingType = 'unico' | 'mensal';
 
 export interface VultoPriceItem {
@@ -112,128 +113,104 @@ export interface VultoAuditLogItem {
   created_at: string;
 }
 
-// Fallbacks locais e padrão de operadores
-export const DEFAULT_OPERATORS: VultoOperator[] = [
-  { id: 'felipe', name: 'Felipe', active: true, created_at: new Date().toISOString() },
-  { id: 'pietro', name: 'Pietro', active: true, created_at: new Date().toISOString() },
-];
-
-const ACTIVE_OPERATOR_STORAGE_KEY = 'vulto_active_operator';
-
 // =====================================================================
-// OPERADORES & SESSÃO ATIVA
+// SESSÃO DE OPERADOR ATIVO (Felipe / Pietro)
 // =====================================================================
+
+export const ACTIVE_OPERATOR_KEY = 'vulto_active_operator';
 
 export function getActiveOperatorSession(): VultoOperator | null {
   try {
-    const raw = sessionStorage.getItem(ACTIVE_OPERATOR_STORAGE_KEY);
-    if (raw) {
-      return JSON.parse(raw);
+    const raw = sessionStorage.getItem(ACTIVE_OPERATOR_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw) as VultoOperator;
+  } catch {
+    return null;
+  }
+}
+
+export function setActiveOperatorSession(operator: VultoOperator | null) {
+  try {
+    if (!operator) {
+      sessionStorage.removeItem(ACTIVE_OPERATOR_KEY);
+    } else {
+      sessionStorage.setItem(ACTIVE_OPERATOR_KEY, JSON.stringify(operator));
     }
   } catch (e) {
-    console.error('Erro ao ler operador ativo:', e);
+    console.error('Erro ao salvar operador ativo', e);
   }
-  return null;
-}
-
-export function setActiveOperatorSession(op: VultoOperator) {
-  try {
-    sessionStorage.setItem(ACTIVE_OPERATOR_STORAGE_KEY, JSON.stringify(op));
-  } catch (e) {
-    console.error('Erro ao salvar operador ativo:', e);
-  }
-}
-
-export function clearActiveOperatorSession() {
-  try {
-    sessionStorage.removeItem(ACTIVE_OPERATOR_STORAGE_KEY);
-  } catch (e) {
-    console.error('Erro ao limpar operador ativo:', e);
-  }
-}
-
-/**
- * Busca os operadores da tabela vulto_operators.
- */
-export async function fetchVultoOperators(): Promise<VultoOperator[]> {
-  if (isSupabaseConfigured) {
-    try {
-      const { data, error } = await supabase
-        .from('vulto_operators')
-        .select('*')
-        .order('name', { ascending: true });
-
-      if (!error && data && data.length > 0) {
-        return data as VultoOperator[];
-      }
-
-      if (!error && data && data.length === 0) {
-        try {
-          const { data: inserted } = await supabase
-            .from('vulto_operators')
-            .insert([
-              { name: 'Felipe', active: true },
-              { name: 'Pietro', active: true },
-            ])
-            .select();
-
-          if (inserted && inserted.length > 0) {
-            return inserted as VultoOperator[];
-          }
-        } catch (e) {}
-      }
-    } catch (e) {
-      console.warn('Erro ao buscar vulto_operators:', e);
-    }
-  }
-  return DEFAULT_OPERATORS;
 }
 
 // =====================================================================
 // AUDITORIA (vulto_audit_logs)
 // =====================================================================
 
-export async function logVultoAudit(params: {
+export async function logVultoAudit(payload: {
   action: string;
   entity_type: string;
   entity_id?: string | null;
   details?: string | null;
-  operator_id?: string | null;
 }) {
-  const currentOp = getActiveOperatorSession();
-  const opId = params.operator_id !== undefined ? params.operator_id : currentOp?.id || null;
-  const opName = currentOp?.name || 'Operador';
-
   if (!isSupabaseConfigured) return;
-
   try {
+    const op = getActiveOperatorSession();
     await supabase.from('vulto_audit_logs').insert([
       {
-        operator_id: opId,
-        action: params.action,
-        entity_type: params.entity_type,
-        entity_id: params.entity_id || null,
-        details: params.details || `${opName} realizou ${params.action}`,
+        operator_id: op?.id || null,
+        action: payload.action,
+        entity_type: payload.entity_type,
+        entity_id: payload.entity_id || null,
+        details: payload.details || null,
       },
     ]);
-  } catch (err) {
-    console.warn('Erro ao gravar log de auditoria:', err);
+  } catch (e) {
+    console.error('Erro ao registrar auditoria:', e);
   }
 }
 
-export async function fetchVultoAuditLogs(limit = 100): Promise<VultoAuditLogItem[]> {
-  if (!isSupabaseConfigured) return [];
+export async function fetchVultoAuditLogs(): Promise<{ data: VultoAuditLogItem[]; error: string | null }> {
+  if (!isSupabaseConfigured) return { data: [], error: 'Supabase não configurado' };
   try {
     const { data, error } = await supabase
       .from('vulto_audit_logs')
       .select('*')
       .order('created_at', { ascending: false })
-      .limit(limit);
+      .limit(100);
+    if (error) return { data: [], error: error.message };
+    return { data: (data || []) as VultoAuditLogItem[], error: null };
+  } catch (e: any) {
+    return { data: [], error: e.message || 'Erro ao carregar auditoria' };
+  }
+}
 
-    if (error || !data) return [];
-    return data as VultoAuditLogItem[];
-  } catch (e) {
-    return [];
+// =====================================================================
+// OPERADORES (vulto_operators)
+// =====================================================================
+
+export async function fetchVultoOperators(): Promise<VultoOperator[]> {
+  if (!isSupabaseConfigured) {
+    return [
+      { id: 'op-felipe', name: 'Felipe', active: true, created_at: new Date().toISOString() },
+      { id: 'op-pietro', name: 'Pietro', active: true, created_at: new Date().toISOString() },
+    ];
+  }
+  try {
+    const { data, error } = await supabase
+      .from('vulto_operators')
+      .select('*')
+      .order('name', { ascending: true });
+    if (error || !data || data.length === 0) {
+      return [
+        { id: 'op-felipe', name: 'Felipe', active: true, created_at: new Date().toISOString() },
+        { id: 'op-pietro', name: 'Pietro', active: true, created_at: new Date().toISOString() },
+      ];
+    }
+    return data as VultoOperator[];
+  } catch {
+    return [
+      { id: 'op-felipe', name: 'Felipe', active: true, created_at: new Date().toISOString() },
+      { id: 'op-pietro', name: 'Pietro', active: true, created_at: new Date().toISOString() },
+    ];
   }
 }
 
@@ -248,13 +225,8 @@ export async function fetchVultoFinance(): Promise<{ data: VultoFinanceItem[]; e
       .from('vulto_finance')
       .select('*')
       .order('created_at', { ascending: false });
-
     if (error) return { data: [], error: error.message };
-    const mapped = (data || []).map((item: any) => ({
-      ...item,
-      settlement_status: item.settlement_status || (item.entry_type === 'entrada' ? 'liquidado' : 'liquidado'),
-    }));
-    return { data: mapped as VultoFinanceItem[], error: null };
+    return { data: (data || []) as VultoFinanceItem[], error: null };
   } catch (e: any) {
     return { data: [], error: e.message || 'Erro ao carregar financeiro' };
   }
@@ -268,47 +240,28 @@ export async function createVultoFinance(payload: {
   settlement_status?: SettlementStatus;
 }): Promise<{ data: VultoFinanceItem | null; error: string | null }> {
   const op = getActiveOperatorSession();
-  const settlement = payload.entry_type === 'entrada' ? (payload.settlement_status || 'liquidado') : 'liquidado';
-
   const insertPayload = {
     title: payload.title.trim(),
     description: payload.description?.trim() || null,
     amount: Number(payload.amount),
     entry_type: payload.entry_type,
-    settlement_status: settlement,
+    settlement_status: payload.settlement_status || 'liquidado',
     operator_id: op?.id || null,
   };
-
   try {
     const { data, error } = await supabase
       .from('vulto_finance')
       .insert([insertPayload])
       .select()
       .single();
-
     if (error) return { data: null, error: error.message };
-
-    const actionName =
-      payload.entry_type === 'entrada'
-        ? settlement === 'pendente'
-          ? 'finance_receivable_created'
-          : 'Adicionou Entrada'
-        : 'Adicionou Saída';
-
     await logVultoAudit({
-      action: actionName,
+      action: 'Adicionou Movimentação',
       entity_type: 'vulto_finance',
       entity_id: data.id,
-      details: `${op?.name || 'Operador'} adicionou ${payload.entry_type} (${settlement}): ${payload.title} (R$ ${payload.amount.toLocaleString('pt-BR')})`,
+      details: (op ? op.name : 'Operador') + ' cadastrou ' + payload.entry_type + ': ' + payload.title,
     });
-
-    return {
-      data: {
-        ...(data as any),
-        settlement_status: settlement,
-      },
-      error: null,
-    };
+    return { data: data as VultoFinanceItem, error: null };
   } catch (e: any) {
     return { data: null, error: e.message || 'Erro ao criar movimentação' };
   }
@@ -333,22 +286,18 @@ export async function updateVultoFinance(
   if (updates.amount !== undefined) payload.amount = Number(updates.amount);
   if (updates.entry_type !== undefined) payload.entry_type = updates.entry_type;
   if (updates.settlement_status !== undefined) payload.settlement_status = updates.settlement_status;
-
   try {
     const { error } = await supabase
       .from('vulto_finance')
       .update(payload)
       .eq('id', id);
-
     if (error) return { success: false, error: error.message };
-
     await logVultoAudit({
       action: 'Editou Movimentação',
       entity_type: 'vulto_finance',
       entity_id: id,
-      details: `${op?.name || 'Operador'} atualizou movimentação #${id.slice(0, 8)}`,
+      details: (op ? op.name : 'Operador') + ' atualizou movimentação #' + id.slice(0, 8),
     });
-
     return { success: true, error: null };
   } catch (e: any) {
     return { success: false, error: e.message || 'Erro ao atualizar' };
@@ -362,16 +311,13 @@ export async function deleteVultoFinance(id: string): Promise<{ success: boolean
       .from('vulto_finance')
       .delete()
       .eq('id', id);
-
     if (error) return { success: false, error: error.message };
-
     await logVultoAudit({
       action: 'Excluiu Movimentação',
       entity_type: 'vulto_finance',
       entity_id: id,
-      details: `${op?.name || 'Operador'} excluiu movimentação #${id.slice(0, 8)}`,
+      details: (op ? op.name : 'Operador') + ' excluiu movimentação #' + id.slice(0, 8),
     });
-
     return { success: true, error: null };
   } catch (e: any) {
     return { success: false, error: e.message || 'Erro ao excluir' };
@@ -389,7 +335,6 @@ export async function fetchVultoMonthlyExpenses(): Promise<{ data: VultoMonthlyE
       .from('vulto_monthly_expenses')
       .select('*')
       .order('created_at', { ascending: false });
-
     if (error) return { data: [], error: error.message };
     return { data: (data || []) as VultoMonthlyExpenseItem[], error: null };
   } catch (e: any) {
@@ -413,23 +358,19 @@ export async function createVultoMonthlyExpense(payload: {
     active: payload.active !== undefined ? payload.active : true,
     operator_id: op?.id || null,
   };
-
   try {
     const { data, error } = await supabase
       .from('vulto_monthly_expenses')
       .insert([insertPayload])
       .select()
       .single();
-
     if (error) return { data: null, error: error.message };
-
     await logVultoAudit({
       action: 'Criou Gasto Mensal',
       entity_type: 'vulto_monthly_expenses',
       entity_id: data.id,
-      details: `${op?.name || 'Operador'} cadastrou gasto fixo: ${payload.title} (R$ ${payload.amount.toLocaleString('pt-BR')})`,
+      details: (op ? op.name : 'Operador') + ' cadastrou gasto fixo: ' + payload.title,
     });
-
     return { data: data as VultoMonthlyExpenseItem, error: null };
   } catch (e: any) {
     return { data: null, error: e.message || 'Erro ao cadastrar gasto mensal' };
@@ -455,22 +396,18 @@ export async function updateVultoMonthlyExpense(
   if (updates.amount !== undefined) payload.amount = Number(updates.amount);
   if (updates.due_day !== undefined) payload.due_day = updates.due_day !== null ? Number(updates.due_day) : null;
   if (updates.active !== undefined) payload.active = updates.active;
-
   try {
     const { error } = await supabase
       .from('vulto_monthly_expenses')
       .update(payload)
       .eq('id', id);
-
     if (error) return { success: false, error: error.message };
-
     await logVultoAudit({
       action: 'Editou Gasto Mensal',
       entity_type: 'vulto_monthly_expenses',
       entity_id: id,
-      details: `${op?.name || 'Operador'} editou gasto fixo #${id.slice(0, 8)}`,
+      details: (op ? op.name : 'Operador') + ' editou gasto fixo #' + id.slice(0, 8),
     });
-
     return { success: true, error: null };
   } catch (e: any) {
     return { success: false, error: e.message || 'Erro ao atualizar gasto mensal' };
@@ -484,16 +421,13 @@ export async function deleteVultoMonthlyExpense(id: string): Promise<{ success: 
       .from('vulto_monthly_expenses')
       .delete()
       .eq('id', id);
-
     if (error) return { success: false, error: error.message };
-
     await logVultoAudit({
       action: 'Excluiu Gasto Mensal',
       entity_type: 'vulto_monthly_expenses',
       entity_id: id,
-      details: `${op?.name || 'Operador'} excluiu gasto fixo #${id.slice(0, 8)}`,
+      details: (op ? op.name : 'Operador') + ' excluiu gasto fixo #' + id.slice(0, 8),
     });
-
     return { success: true, error: null };
   } catch (e: any) {
     return { success: false, error: e.message || 'Erro ao excluir gasto mensal' };
@@ -511,7 +445,6 @@ export async function fetchVultoClients(): Promise<{ data: VultoClientItem[]; er
       .from('vulto_clients')
       .select('*')
       .order('created_at', { ascending: false });
-
     if (error) return { data: [], error: error.message };
     return { data: (data || []) as VultoClientItem[], error: null };
   } catch (e: any) {
@@ -529,23 +462,19 @@ export async function createVultoClient(payload: {
     service_type: payload.service_type,
     operator_id: op?.id || null,
   };
-
   try {
     const { data, error } = await supabase
       .from('vulto_clients')
       .insert([insertPayload])
       .select()
       .single();
-
     if (error) return { data: null, error: error.message };
-
     await logVultoAudit({
       action: 'Adicionou Cliente',
       entity_type: 'vulto_clients',
       entity_id: data.id,
-      details: `${op?.name || 'Operador'} cadastrou o cliente ${payload.name} (${payload.service_type})`,
+      details: (op ? op.name : 'Operador') + ' cadastrou o cliente ' + payload.name,
     });
-
     return { data: data as VultoClientItem, error: null };
   } catch (e: any) {
     return { data: null, error: e.message || 'Erro ao cadastrar cliente' };
@@ -559,18 +488,15 @@ export async function deleteVultoClient(id: string): Promise<{ success: boolean;
       .from('vulto_clients')
       .delete()
       .eq('id', id);
-
     if (error) {
       return { success: false, error: error.message };
     }
-
     await logVultoAudit({
       action: 'Excluiu Cliente',
       entity_type: 'vulto_clients',
       entity_id: id,
-      details: `${op?.name || 'Operador'} removeu o cliente #${id.slice(0, 8)}`,
+      details: (op ? op.name : 'Operador') + ' removeu o cliente #' + id.slice(0, 8),
     });
-
     return { success: true, error: null };
   } catch (e: any) {
     return { success: false, error: e.message || 'Erro ao excluir cliente' };
@@ -588,7 +514,6 @@ export async function fetchVultoTasks(): Promise<{ data: VultoTaskItem[]; error:
       .from('vulto_tasks')
       .select('*')
       .order('created_at', { ascending: false });
-
     if (error) return { data: [], error: error.message };
     return { data: (data || []) as VultoTaskItem[], error: null };
   } catch (e: any) {
@@ -608,23 +533,19 @@ export async function createVultoTask(payload: {
     completed_at: null,
     operator_id: op?.id || null,
   };
-
   try {
     const { data, error } = await supabase
       .from('vulto_tasks')
       .insert([insertPayload])
       .select()
       .single();
-
     if (error) return { data: null, error: error.message };
-
     await logVultoAudit({
       action: 'Criou Tarefa',
       entity_type: 'vulto_tasks',
       entity_id: data.id,
-      details: `${op?.name || 'Operador'} adicionou a tarefa: ${payload.title}`,
+      details: (op ? op.name : 'Operador') + ' adicionou a tarefa: ' + payload.title,
     });
-
     return { data: data as VultoTaskItem, error: null };
   } catch (e: any) {
     return { data: null, error: e.message || 'Erro ao cadastrar tarefa' };
@@ -638,22 +559,18 @@ export async function toggleVultoTask(
   const op = getActiveOperatorSession();
   const completed_at = completed ? new Date().toISOString() : null;
   const updated_at = new Date().toISOString();
-
   try {
     const { error } = await supabase
       .from('vulto_tasks')
       .update({ completed, completed_at, updated_at, operator_id: op?.id || null })
       .eq('id', id);
-
     if (error) return { success: false, error: error.message };
-
     await logVultoAudit({
       action: completed ? 'Concluiu Tarefa' : 'Desmarcou Tarefa',
       entity_type: 'vulto_tasks',
       entity_id: id,
-      details: `${op?.name || 'Operador'} marcou tarefa como ${completed ? 'concluída' : 'pendente'}`,
+      details: (op ? op.name : 'Operador') + ' marcou tarefa como ' + (completed ? 'concluída' : 'pendente'),
     });
-
     return { success: true, error: null };
   } catch (e: any) {
     return { success: false, error: e.message || 'Erro ao alterar tarefa' };
@@ -668,22 +585,18 @@ export async function updateVultoTask(
   const payload: any = { updated_at: new Date().toISOString(), operator_id: op?.id || null };
   if (updates.title !== undefined) payload.title = updates.title.trim();
   if (updates.notes !== undefined) payload.notes = updates.notes?.trim() || null;
-
   try {
     const { error } = await supabase
       .from('vulto_tasks')
       .update(payload)
       .eq('id', id);
-
     if (error) return { success: false, error: error.message };
-
     await logVultoAudit({
       action: 'Editou Tarefa',
       entity_type: 'vulto_tasks',
       entity_id: id,
-      details: `${op?.name || 'Operador'} editou tarefa #${id.slice(0, 8)}`,
+      details: (op ? op.name : 'Operador') + ' editou tarefa #' + id.slice(0, 8),
     });
-
     return { success: true, error: null };
   } catch (e: any) {
     return { success: false, error: e.message || 'Erro ao editar tarefa' };
@@ -697,16 +610,13 @@ export async function deleteVultoTask(id: string): Promise<{ success: boolean; e
       .from('vulto_tasks')
       .delete()
       .eq('id', id);
-
     if (error) return { success: false, error: error.message };
-
     await logVultoAudit({
       action: 'Excluiu Tarefa',
       entity_type: 'vulto_tasks',
       entity_id: id,
-      details: `${op?.name || 'Operador'} excluiu tarefa #${id.slice(0, 8)}`,
+      details: (op ? op.name : 'Operador') + ' excluiu tarefa #' + id.slice(0, 8),
     });
-
     return { success: true, error: null };
   } catch (e: any) {
     return { success: false, error: e.message || 'Erro ao excluir tarefa' };
@@ -724,7 +634,6 @@ export async function fetchVultoSalesScripts(): Promise<{ data: VultoSalesScript
       .from('vulto_sales_scripts')
       .select('*')
       .order('created_at', { ascending: false });
-
     if (error) return { data: [], error: error.message };
     return { data: (data || []) as VultoSalesScriptItem[], error: null };
   } catch (e: any) {
@@ -744,23 +653,19 @@ export async function createVultoSalesScript(payload: {
     content: payload.content,
     operator_id: op?.id || null,
   };
-
   try {
     const { data, error } = await supabase
       .from('vulto_sales_scripts')
       .insert([insertPayload])
       .select()
       .single();
-
     if (error) return { data: null, error: error.message };
-
     await logVultoAudit({
       action: 'Criou Script de Venda',
       entity_type: 'vulto_sales_scripts',
       entity_id: data.id,
-      details: `${op?.name || 'Operador'} cadastrou o script "${payload.title}" (${payload.channel})`,
+      details: (op ? op.name : 'Operador') + ' cadastrou o script "' + payload.title + '" (' + payload.channel + ')',
     });
-
     return { data: data as VultoSalesScriptItem, error: null };
   } catch (e: any) {
     return { data: null, error: e.message || 'Erro ao cadastrar script' };
@@ -780,22 +685,18 @@ export async function updateVultoSalesScript(
   if (updates.title !== undefined) payload.title = updates.title.trim();
   if (updates.channel !== undefined) payload.channel = updates.channel;
   if (updates.content !== undefined) payload.content = updates.content;
-
   try {
     const { error } = await supabase
       .from('vulto_sales_scripts')
       .update(payload)
       .eq('id', id);
-
     if (error) return { success: false, error: error.message };
-
     await logVultoAudit({
       action: 'Editou Script de Venda',
       entity_type: 'vulto_sales_scripts',
       entity_id: id,
-      details: `${op?.name || 'Operador'} editou script #${id.slice(0, 8)}`,
+      details: (op ? op.name : 'Operador') + ' editou script #' + id.slice(0, 8),
     });
-
     return { success: true, error: null };
   } catch (e: any) {
     return { success: false, error: e.message || 'Erro ao editar script' };
@@ -809,16 +710,13 @@ export async function deleteVultoSalesScript(id: string): Promise<{ success: boo
       .from('vulto_sales_scripts')
       .delete()
       .eq('id', id);
-
     if (error) return { success: false, error: error.message };
-
     await logVultoAudit({
       action: 'Excluiu Script de Venda',
       entity_type: 'vulto_sales_scripts',
       entity_id: id,
-      details: `${op?.name || 'Operador'} excluiu script #${id.slice(0, 8)}`,
+      details: (op ? op.name : 'Operador') + ' excluiu script #' + id.slice(0, 8),
     });
-
     return { success: true, error: null };
   } catch (e: any) {
     return { success: false, error: e.message || 'Erro ao excluir script' };
@@ -836,7 +734,6 @@ export async function fetchVultoInventory(): Promise<{ data: VultoInventoryItem[
       .from('vulto_inventory')
       .select('*')
       .order('created_at', { ascending: false });
-
     if (error) return { data: [], error: error.message };
     return { data: (data || []) as VultoInventoryItem[], error: null };
   } catch (e: any) {
@@ -856,23 +753,19 @@ export async function createVultoInventoryItem(payload: {
     notes: payload.notes?.trim() || null,
     operator_id: op?.id || null,
   };
-
   try {
     const { data, error } = await supabase
       .from('vulto_inventory')
       .insert([insertPayload])
       .select()
       .single();
-
     if (error) return { data: null, error: error.message };
-
     await logVultoAudit({
       action: 'Adicionou Item Estoque',
       entity_type: 'vulto_inventory',
       entity_id: data.id,
-      details: `${op?.name || 'Operador'} adicionou ${payload.name} (${insertPayload.quantity} un)`,
+      details: (op ? op.name : 'Operador') + ' adicionou ' + payload.name + ' (' + insertPayload.quantity + ' un)',
     });
-
     return { data: data as VultoInventoryItem, error: null };
   } catch (e: any) {
     return { data: null, error: e.message || 'Erro ao criar item de estoque' };
@@ -892,22 +785,18 @@ export async function updateVultoInventoryItem(
   if (updates.name !== undefined) payload.name = updates.name.trim();
   if (updates.quantity !== undefined) payload.quantity = Math.max(0, Number(updates.quantity) || 0);
   if (updates.notes !== undefined) payload.notes = updates.notes?.trim() || null;
-
   try {
     const { error } = await supabase
       .from('vulto_inventory')
       .update(payload)
       .eq('id', id);
-
     if (error) return { success: false, error: error.message };
-
     await logVultoAudit({
       action: 'Alterou Estoque',
       entity_type: 'vulto_inventory',
       entity_id: id,
-      details: `${op?.name || 'Operador'} atualizou o item #${id.slice(0, 8)}`,
+      details: (op ? op.name : 'Operador') + ' atualizou o item #' + id.slice(0, 8),
     });
-
     return { success: true, error: null };
   } catch (e: any) {
     return { success: false, error: e.message || 'Erro ao atualizar estoque' };
@@ -921,16 +810,13 @@ export async function deleteVultoInventoryItem(id: string): Promise<{ success: b
       .from('vulto_inventory')
       .delete()
       .eq('id', id);
-
     if (error) return { success: false, error: error.message };
-
     await logVultoAudit({
       action: 'Excluiu Item Estoque',
       entity_type: 'vulto_inventory',
       entity_id: id,
-      details: `${op?.name || 'Operador'} removeu o item de estoque #${id.slice(0, 8)}`,
+      details: (op ? op.name : 'Operador') + ' removeu o item de estoque #' + id.slice(0, 8),
     });
-
     return { success: true, error: null };
   } catch (e: any) {
     return { success: false, error: e.message || 'Erro ao excluir item de estoque' };
@@ -938,8 +824,6 @@ export async function deleteVultoInventoryItem(id: string): Promise<{ success: b
 }
 
 // =====================================================================
-// TABELA DE PREÇOS (vulto_price_table)
-// =====================================================================// =====================================================================
 // TABELA DE PREÇOS (vulto_price_table)
 // =====================================================================
 
@@ -1018,10 +902,10 @@ export async function updateVultoPriceItem(
     if (error) return { success: false, error: error.message };
 
     let actionName = 'price_updated';
-    let detailMsg = (op ? op.name : "Operador") + " editou o preço #" + id.slice(0, 8);
+    let detailMsg = (op ? op.name : 'Operador') + ' editou o preço #' + id.slice(0, 8);
     if (updates.active !== undefined) {
       actionName = updates.active ? 'price_activated' : 'price_deactivated';
-      detailMsg = (op ? op.name : "Operador") + (updates.active ? " ativou" : " inativou") + " o serviço #" + id.slice(0, 8);
+      detailMsg = (op ? op.name : 'Operador') + (updates.active ? ' ativou' : ' inativou') + ' o serviço #' + id.slice(0, 8);
     }
 
     await logVultoAudit({
@@ -1074,13 +958,11 @@ export async function formatOperationalData(): Promise<{ success: boolean; error
       supabase.from('vulto_price_table').delete().neq('id', '00000000-0000-0000-0000-000000000000'),
       supabase.from('vulto_audit_logs').delete().neq('id', '00000000-0000-0000-0000-000000000000'),
     ]);
-
     await logVultoAudit({
       action: 'Formatação de Dados',
       entity_type: 'system',
-      details: `${op?.name || 'Operador'} formatou os dados operacionais do painel.`,
+      details: (op ? op.name : 'Operador') + ' formatou os dados operacionais do painel.',
     });
-
     return { success: true, error: null };
   } catch (e: any) {
     return { success: false, error: e.message || 'Erro ao formatar dados' };
