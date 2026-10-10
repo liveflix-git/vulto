@@ -13,12 +13,17 @@ import {
   MessageSquare,
   Mail,
   UserCheck,
+  Tag,
+  DollarSign,
+  Search,
 } from 'lucide-react';
 import {
   VultoTaskItem,
   VultoSalesScriptItem,
   VultoScriptChannel,
   VultoOperator,
+  VultoPriceItem,
+  VultoBillingType,
   fetchVultoTasks,
   createVultoTask,
   toggleVultoTask,
@@ -29,11 +34,15 @@ import {
   updateVultoSalesScript,
   deleteVultoSalesScript,
   fetchVultoOperators,
+  fetchVultoPriceTable,
+  createVultoPriceItem,
+  updateVultoPriceItem,
+  deleteVultoPriceItem,
 } from '../../services/vultoCoreService';
 import { supabase } from '../../lib/supabase.ts';
 
 export function ProjectsServicesView() {
-  const [activeTab, setActiveTab] = useState<'tasks' | 'scripts'>('tasks');
+  const [activeTab, setActiveTab] = useState<'tasks' | 'scripts' | 'pricing'>('tasks');
 
   // Checklist de Tarefas
   const [tasks, setTasks] = useState<VultoTaskItem[]>([]);
@@ -43,6 +52,12 @@ export function ProjectsServicesView() {
   const [scripts, setScripts] = useState<VultoSalesScriptItem[]>([]);
   const [loadingScripts, setLoadingScripts] = useState(true);
   const [scriptChannelFilter, setScriptChannelFilter] = useState<'ALL' | VultoScriptChannel>('ALL');
+
+  // Tabela de Preços
+  const [prices, setPrices] = useState<VultoPriceItem[]>([]);
+  const [loadingPrices, setLoadingPrices] = useState(true);
+  const [priceSearch, setPriceSearch] = useState('');
+  const [priceBillingFilter, setPriceBillingFilter] = useState<'ALL' | VultoBillingType>('ALL');
 
   // Operadores
   const [operators, setOperators] = useState<VultoOperator[]>([]);
@@ -64,10 +79,21 @@ export function ProjectsServicesView() {
   const [isSubmittingScript, setIsSubmittingScript] = useState(false);
   const [scriptError, setScriptError] = useState<string | null>(null);
 
+  // Modal Preço
+  const [isPriceModalOpen, setIsPriceModalOpen] = useState(false);
+  const [editingPrice, setEditingPrice] = useState<VultoPriceItem | null>(null);
+  const [priceServiceName, setPriceServiceName] = useState('');
+  const [priceDescription, setPriceDescription] = useState('');
+  const [priceValue, setPriceValue] = useState('');
+  const [priceBillingType, setPriceBillingType] = useState<VultoBillingType>('unico');
+  const [priceActive, setPriceActive] = useState(true);
+  const [isSubmittingPrice, setIsSubmittingPrice] = useState(false);
+  const [priceError, setPriceError] = useState<string | null>(null);
+
   // Confirmação Exclusão
   const [itemToDelete, setItemToDelete] = useState<{
     id: string;
-    type: 'task' | 'script';
+    type: 'task' | 'script' | 'price';
     title: string;
   } | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -83,19 +109,22 @@ export function ProjectsServicesView() {
 
   const loadData = useCallback(async () => {
     try {
-      const [ops, tskRes, scRes] = await Promise.all([
+      const [ops, tskRes, scRes, prRes] = await Promise.all([
         fetchVultoOperators(),
         fetchVultoTasks(),
         fetchVultoSalesScripts(),
+        fetchVultoPriceTable(),
       ]);
       setOperators(ops);
       setTasks(tskRes.data);
       setScripts(scRes.data);
+      setPrices(prRes.data);
     } catch (e) {
       console.error(e);
     } finally {
       setLoadingTasks(false);
       setLoadingScripts(false);
+      setLoadingPrices(false);
     }
   }, []);
 
@@ -122,6 +151,9 @@ export function ProjectsServicesView() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'vulto_sales_scripts' }, () => {
         fetchVultoSalesScripts().then((res) => setScripts(res.data));
       })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'vulto_price_table' }, () => {
+        fetchVultoPriceTable().then((res) => setPrices(res.data));
+      })
       .subscribe();
 
     return () => {
@@ -141,7 +173,6 @@ export function ProjectsServicesView() {
   const handleToggleTaskCompleted = async (task: VultoTaskItem) => {
     const nextCompleted = !task.completed;
 
-    // Atualização otimista imediata na UI
     setTasks((prev) =>
       prev.map((t) =>
         t.id === task.id
@@ -157,7 +188,6 @@ export function ProjectsServicesView() {
     const res = await toggleVultoTask(task.id, nextCompleted);
     if (res.error) {
       showToast('Erro ao atualizar status da tarefa.', 'error');
-      // Reverter se erro
       setTasks((prev) =>
         prev.map((t) => (t.id === task.id ? { ...t, completed: task.completed } : t))
       );
@@ -221,7 +251,7 @@ export function ProjectsServicesView() {
         } else if (res.data) {
           setTasks((prev) => [res.data!, ...prev]);
           setIsTaskModalOpen(false);
-          showToast('Tarefa criada.');
+          showToast('Tarefa adicionada.');
         }
       }
     } catch (err: any) {
@@ -243,19 +273,23 @@ export function ProjectsServicesView() {
     setIsScriptModalOpen(true);
   };
 
-  const handleOpenEditScript = (sc: VultoSalesScriptItem) => {
-    setEditingScript(sc);
-    setScriptTitle(sc.title);
-    setScriptChannel(sc.channel);
-    setScriptContent(sc.content);
+  const handleOpenEditScript = (script: VultoSalesScriptItem) => {
+    setEditingScript(script);
+    setScriptTitle(script.title);
+    setScriptChannel(script.channel);
+    setScriptContent(script.content);
     setScriptError(null);
     setIsScriptModalOpen(true);
   };
 
   const handleSubmitScript = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!scriptTitle.trim() || !scriptContent.trim()) {
-      setScriptError('Preencha o título e o conteúdo do script.');
+    if (!scriptTitle.trim()) {
+      setScriptError('Informe o título do script.');
+      return;
+    }
+    if (!scriptContent.trim()) {
+      setScriptError('Informe o conteúdo do script.');
       return;
     }
 
@@ -313,6 +347,117 @@ export function ProjectsServicesView() {
   };
 
   // ==========================================
+  // HANDLERS TABELA DE PREÇOS
+  // ==========================================
+  const handleOpenNewPrice = () => {
+    setEditingPrice(null);
+    setPriceServiceName('');
+    setPriceDescription('');
+    setPriceValue('');
+    setPriceBillingType('unico');
+    setPriceActive(true);
+    setPriceError(null);
+    setIsPriceModalOpen(true);
+  };
+
+  const handleOpenEditPrice = (price: VultoPriceItem) => {
+    setEditingPrice(price);
+    setPriceServiceName(price.service_name);
+    setPriceDescription(price.description || '');
+    setPriceValue(String(price.price));
+    setPriceBillingType(price.billing_type);
+    setPriceActive(price.active);
+    setPriceError(null);
+    setIsPriceModalOpen(true);
+  };
+
+  const handleTogglePriceActive = async (price: VultoPriceItem) => {
+    const nextActive = !price.active;
+    setPrices((prev) =>
+      prev.map((p) => (p.id === price.id ? { ...p, active: nextActive } : p))
+    );
+
+    const res = await updateVultoPriceItem(price.id, { active: nextActive });
+    if (res.error) {
+      showToast('Erro ao alterar status do preço.', 'error');
+      setPrices((prev) =>
+        prev.map((p) => (p.id === price.id ? { ...p, active: price.active } : p))
+      );
+    } else {
+      showToast(nextActive ? 'Serviço ativado.' : 'Serviço desativado.');
+    }
+  };
+
+  const handleSubmitPrice = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!priceServiceName.trim()) {
+      setPriceError('Informe o nome do serviço.');
+      return;
+    }
+    const numPrice = parseFloat(priceValue.replace(',', '.'));
+    if (isNaN(numPrice) || numPrice < 0) {
+      setPriceError('Informe um valor de preço válido.');
+      return;
+    }
+
+    setIsSubmittingPrice(true);
+    setPriceError(null);
+
+    try {
+      if (editingPrice) {
+        const res = await updateVultoPriceItem(editingPrice.id, {
+          service_name: priceServiceName.trim(),
+          description: priceDescription.trim() || null,
+          price: numPrice,
+          billing_type: priceBillingType,
+          active: priceActive,
+        });
+
+        if (res.error) {
+          setPriceError(res.error);
+        } else {
+          setPrices((prev) =>
+            prev.map((p) =>
+              p.id === editingPrice.id
+                ? {
+                    ...p,
+                    service_name: priceServiceName.trim(),
+                    description: priceDescription.trim() || null,
+                    price: numPrice,
+                    billing_type: priceBillingType,
+                    active: priceActive,
+                  }
+                : p
+            )
+          );
+          setIsPriceModalOpen(false);
+          showToast('Preço atualizado.');
+        }
+      } else {
+        const res = await createVultoPriceItem({
+          service_name: priceServiceName.trim(),
+          description: priceDescription.trim() || null,
+          price: numPrice,
+          billing_type: priceBillingType,
+          active: priceActive,
+        });
+
+        if (res.error) {
+          setPriceError(res.error);
+        } else if (res.data) {
+          setPrices((prev) => [res.data!, ...prev]);
+          setIsPriceModalOpen(false);
+          showToast('Serviço cadastrado na tabela de preços.');
+        }
+      }
+    } catch (err: any) {
+      setPriceError(err.message || 'Erro inesperado.');
+    } finally {
+      setIsSubmittingPrice(false);
+    }
+  };
+
+  // ==========================================
   // CONFIRMAÇÃO DE EXCLUSÃO
   // ==========================================
   const handleConfirmDelete = async () => {
@@ -329,13 +474,22 @@ export function ProjectsServicesView() {
           showToast('Registro excluído.');
           setItemToDelete(null);
         }
-      } else {
+      } else if (itemToDelete.type === 'script') {
         const res = await deleteVultoSalesScript(itemToDelete.id);
         if (res.error) {
           showToast('Não foi possível excluir o script: ' + res.error, 'error');
         } else {
           setScripts((prev) => prev.filter((s) => s.id !== itemToDelete.id));
           showToast('Registro excluído.');
+          setItemToDelete(null);
+        }
+      } else if (itemToDelete.type === 'price') {
+        const res = await deleteVultoPriceItem(itemToDelete.id);
+        if (res.error) {
+          showToast('Não foi possível excluir o preço: ' + res.error, 'error');
+        } else {
+          setPrices((prev) => prev.filter((p) => p.id !== itemToDelete.id));
+          showToast('Serviço excluído da tabela.');
           setItemToDelete(null);
         }
       }
@@ -350,6 +504,16 @@ export function ProjectsServicesView() {
     if (scriptChannelFilter === 'ALL') return scripts;
     return scripts.filter((s) => s.channel === scriptChannelFilter);
   }, [scripts, scriptChannelFilter]);
+
+  const filteredPrices = useMemo(() => {
+    return prices.filter((p) => {
+      const matchSearch =
+        p.service_name.toLowerCase().includes(priceSearch.toLowerCase()) ||
+        (p.description && p.description.toLowerCase().includes(priceSearch.toLowerCase()));
+      const matchBilling = priceBillingFilter === 'ALL' || p.billing_type === priceBillingFilter;
+      return matchSearch && matchBilling;
+    });
+  }, [prices, priceSearch, priceBillingFilter]);
 
   return (
     <div className="space-y-6">
@@ -378,12 +542,12 @@ export function ProjectsServicesView() {
             PROJETOS & SERVIÇOS
           </h1>
           <p className="text-xs text-white/50 font-sans mt-0.5">
-            Checklist operacional de entregas e repositório de scripts comerciais.
+            Checklist operacional de entregas, repositório de scripts comerciais e tabela de preços.
           </p>
         </div>
 
         {/* Abas */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <button
             onClick={() => setActiveTab('tasks')}
             className={`px-4 py-2 font-mono text-xs font-bold tracking-wider transition-colors cursor-pointer border ${
@@ -403,6 +567,16 @@ export function ProjectsServicesView() {
             }`}
           >
             SCRIPTS DE VENDA
+          </button>
+          <button
+            onClick={() => setActiveTab('pricing')}
+            className={`px-4 py-2 font-mono text-xs font-bold tracking-wider transition-colors cursor-pointer border ${
+              activeTab === 'pricing'
+                ? 'bg-[#161616] text-[#C6FF00] border-[#C6FF00]'
+                : 'bg-transparent text-white/60 hover:text-white border-white/10'
+            }`}
+          >
+            TABELA DE PREÇOS
           </button>
         </div>
       </div>
@@ -428,69 +602,72 @@ export function ProjectsServicesView() {
           <div className="bg-[#111111] border border-white/10 overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs font-mono">
-                <thead>
-                  <tr className="border-b border-white/10 bg-[#0E0E0E] text-white/50 text-[10px] uppercase">
-                    <th className="py-3 px-4 w-12 text-center">Status</th>
-                    <th className="py-3 px-4">Título</th>
-                    <th className="py-3 px-4">Observação</th>
-                    <th className="py-3 px-4">Criado por</th>
-                    <th className="py-3 px-4">Data</th>
-                    <th className="py-3 px-4 text-right">Ações</th>
+                <thead className="bg-[#161616] text-white/50 border-b border-white/10 uppercase">
+                  <tr>
+                    <th className="p-3 w-12 text-center">Status</th>
+                    <th className="p-3">Título / Demanda</th>
+                    <th className="p-3 hidden md:table-cell">Observações</th>
+                    <th className="p-3 hidden sm:table-cell w-36">Operador</th>
+                    <th className="p-3 text-right w-24">Ações</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-white/5">
                   {loadingTasks ? (
                     <tr>
-                      <td colSpan={6} className="py-8 text-center text-white/40">
-                        Carregando tarefas...
+                      <td colSpan={5} className="p-8 text-center text-white/40">
+                        Carregando tarefas operacionais...
                       </td>
                     </tr>
                   ) : tasks.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="py-8 text-center text-white/40">
-                        Nenhuma tarefa cadastrada.
+                      <td colSpan={5} className="p-8 text-center text-white/40">
+                        Nenhuma tarefa cadastrada. Clique em "+ NOVA TAREFA" para começar.
                       </td>
                     </tr>
                   ) : (
                     tasks.map((task) => (
-                      <tr key={task.id} className="hover:bg-white/[0.02] transition-colors">
-                        <td className="py-3 px-4 text-center">
+                      <tr
+                        key={task.id}
+                        className={`hover:bg-white/[0.02] transition-colors ${
+                          task.completed ? 'opacity-50' : ''
+                        }`}
+                      >
+                        <td className="p-3 text-center">
                           <button
-                            type="button"
                             onClick={() => handleToggleTaskCompleted(task)}
-                            className="cursor-pointer text-white/60 hover:text-white"
+                            className="cursor-pointer text-[#C6FF00] hover:opacity-80 transition-opacity inline-flex items-center justify-center"
+                            title={task.completed ? 'Marcar como pendente' : 'Marcar como concluída'}
                           >
                             {task.completed ? (
-                              <CheckSquare className="w-4 h-4 text-[#C6FF00]" />
+                              <CheckSquare className="w-5 h-5" />
                             ) : (
-                              <Square className="w-4 h-4 text-white/30" />
+                              <Square className="w-5 h-5 text-white/40 hover:text-white" />
                             )}
                           </button>
                         </td>
-                        <td className="py-3 px-4">
+                        <td className="p-3">
                           <span
-                            className={`font-bold ${
-                              task.completed ? 'line-through text-white/40' : 'text-white'
+                            className={`font-medium ${
+                              task.completed ? 'line-through text-white/50' : 'text-white'
                             }`}
                           >
                             {task.title}
                           </span>
                         </td>
-                        <td className="py-3 px-4 text-white/60">
-                          {task.notes || <span className="text-white/20">-</span>}
+                        <td className="p-3 hidden md:table-cell text-white/60 font-sans text-xs">
+                          {task.notes || '—'}
                         </td>
-                        <td className="py-3 px-4 text-white/80">
-                          {getOperatorName(task.operator_id)}
+                        <td className="p-3 hidden sm:table-cell text-white/60">
+                          <span className="px-2 py-0.5 bg-white/5 border border-white/10 rounded-none text-[11px]">
+                            {getOperatorName(task.operator_id)}
+                          </span>
                         </td>
-                        <td className="py-3 px-4 text-white/50">
-                          {new Date(task.created_at).toLocaleDateString('pt-BR')}
-                        </td>
-                        <td className="py-3 px-4 text-right">
-                          <div className="flex items-center justify-end gap-1.5">
+                        <td className="p-3 text-right">
+                          <div className="flex items-center justify-end gap-1">
                             <button
                               onClick={() => handleOpenEditTask(task)}
-                              className="p-1.5 bg-white/5 hover:bg-white/10 text-white/70 hover:text-[#C6FF00] transition-colors cursor-pointer"
-                              title="Editar"
+                              className="p-1.5 text-white/60 hover:text-white hover:bg-white/5 cursor-pointer"
+                              title="Editar Tarefa"
                             >
                               <Edit2 className="w-3.5 h-3.5" />
                             </button>
@@ -502,8 +679,8 @@ export function ProjectsServicesView() {
                                   title: task.title,
                                 })
                               }
-                              className="p-1.5 bg-rose-950/20 hover:bg-rose-950/50 text-rose-400 border border-rose-800/30 transition-colors cursor-pointer"
-                              title="Excluir"
+                              className="p-1.5 text-white/60 hover:text-rose-400 hover:bg-white/5 cursor-pointer"
+                              title="Excluir Tarefa"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
                             </button>
@@ -525,48 +702,21 @@ export function ProjectsServicesView() {
       {activeTab === 'scripts' && (
         <div className="space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            {/* Filtros de canais */}
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setScriptChannelFilter('ALL')}
-                className={`px-3 py-1.5 text-xs font-mono border transition-colors cursor-pointer ${
-                  scriptChannelFilter === 'ALL'
-                    ? 'bg-[#161616] text-[#C6FF00] border-[#C6FF00]'
-                    : 'bg-transparent text-white/50 border-white/10 hover:text-white'
-                }`}
-              >
-                TODOS
-              </button>
-              <button
-                onClick={() => setScriptChannelFilter('WhatsApp')}
-                className={`px-3 py-1.5 text-xs font-mono border transition-colors cursor-pointer ${
-                  scriptChannelFilter === 'WhatsApp'
-                    ? 'bg-[#161616] text-[#C6FF00] border-[#C6FF00]'
-                    : 'bg-transparent text-white/50 border-white/10 hover:text-white'
-                }`}
-              >
-                WHATSAPP
-              </button>
-              <button
-                onClick={() => setScriptChannelFilter('E-mail')}
-                className={`px-3 py-1.5 text-xs font-mono border transition-colors cursor-pointer ${
-                  scriptChannelFilter === 'E-mail'
-                    ? 'bg-[#161616] text-[#C6FF00] border-[#C6FF00]'
-                    : 'bg-transparent text-white/50 border-white/10 hover:text-white'
-                }`}
-              >
-                E-MAIL
-              </button>
-              <button
-                onClick={() => setScriptChannelFilter('Presencial')}
-                className={`px-3 py-1.5 text-xs font-mono border transition-colors cursor-pointer ${
-                  scriptChannelFilter === 'Presencial'
-                    ? 'bg-[#161616] text-[#C6FF00] border-[#C6FF00]'
-                    : 'bg-transparent text-white/50 border-white/10 hover:text-white'
-                }`}
-              >
-                PRESENCIAL
-              </button>
+            {/* Filtros de Canal */}
+            <div className="flex items-center gap-2 overflow-x-auto pb-1">
+              {(['ALL', 'WhatsApp', 'Instagram', 'Email'] as const).map((channel) => (
+                <button
+                  key={channel}
+                  onClick={() => setScriptChannelFilter(channel)}
+                  className={`px-3 py-1 font-mono text-xs font-semibold cursor-pointer border transition-colors ${
+                    scriptChannelFilter === channel
+                      ? 'bg-white/10 border-white/30 text-[#C6FF00]'
+                      : 'bg-transparent border-white/10 text-white/50 hover:text-white'
+                  }`}
+                >
+                  {channel === 'ALL' ? 'TODOS OS CANAIS' : channel.toUpperCase()}
+                </button>
+              ))}
             </div>
 
             <button
@@ -579,79 +729,82 @@ export function ProjectsServicesView() {
           </div>
 
           {loadingScripts ? (
-            <div className="bg-[#111111] border border-white/10 p-8 text-center font-mono text-xs text-white/40">
-              Carregando scripts...
+            <div className="bg-[#111111] border border-white/10 p-12 text-center text-white/40 font-mono text-xs">
+              Carregando scripts comerciais...
             </div>
           ) : filteredScripts.length === 0 ? (
-            <div className="bg-[#111111] border border-white/10 p-8 text-center font-mono text-xs text-white/40">
-              Nenhum script cadastrado para este canal.
+            <div className="bg-[#111111] border border-white/10 p-12 text-center text-white/40 font-mono text-xs">
+              Nenhum script encontrado para este canal. Clique em "+ NOVO SCRIPT".
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {filteredScripts.map((script) => (
                 <div
                   key={script.id}
-                  className="bg-[#111111] border border-white/10 p-4 flex flex-col justify-between space-y-3"
+                  className="bg-[#111111] border border-white/10 p-4 flex flex-col justify-between hover:border-white/20 transition-colors group relative"
                 >
-                  <div className="space-y-2">
-                    <div className="flex items-start justify-between gap-2">
-                      <span className="text-[10px] font-mono uppercase px-2 py-0.5 bg-white/5 border border-white/10 text-[#C6FF00]">
+                  <div>
+                    <div className="flex items-start justify-between gap-2 mb-2">
+                      <span className="font-mono text-xs font-bold text-[#C6FF00] px-2 py-0.5 bg-[#C6FF00]/10 border border-[#C6FF00]/20">
                         {script.channel}
                       </span>
-                      <span className="text-[10px] font-mono text-white/40">
-                        Criado por {getOperatorName(script.operator_id)}
-                      </span>
+                      <div className="flex items-center gap-1 opacity-80 group-hover:opacity-100 transition-opacity">
+                        <button
+                          onClick={() => handleOpenEditScript(script)}
+                          className="p-1 text-white/40 hover:text-white cursor-pointer"
+                          title="Editar Script"
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() =>
+                            setItemToDelete({
+                              id: script.id,
+                              type: 'script',
+                              title: script.title,
+                            })
+                          }
+                          className="p-1 text-white/40 hover:text-rose-400 cursor-pointer"
+                          title="Excluir Script"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </div>
 
-                    <h3 className="font-mono text-sm font-bold text-white">
+                    <h3 className="font-mono text-sm font-bold text-white mb-2 leading-tight">
                       {script.title}
                     </h3>
 
-                    <div className="p-3 bg-[#141414] border border-white/5 text-xs font-mono text-white/70 whitespace-pre-wrap max-h-48 overflow-y-auto leading-relaxed">
+                    <div className="bg-[#0A0A0A] border border-white/5 p-3 text-xs text-white/70 font-sans whitespace-pre-wrap leading-relaxed max-h-48 overflow-y-auto mb-3">
                       {script.content}
                     </div>
                   </div>
 
-                  <div className="flex items-center justify-between pt-2 border-t border-white/10">
+                  <div className="pt-2 border-t border-white/5 flex items-center justify-between gap-2">
+                    <span className="text-[10px] font-mono text-white/40">
+                      Por {getOperatorName(script.operator_id)}
+                    </span>
                     <button
                       onClick={() => handleCopyScript(script)}
-                      className="px-3 py-1.5 bg-[#181818] hover:bg-[#222222] border border-white/10 text-xs font-mono text-white flex items-center gap-1.5 cursor-pointer"
+                      className={`px-3 py-1.5 font-mono text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer border ${
+                        copiedScriptId === script.id
+                          ? 'bg-[#C6FF00] text-[#0A0A0A] border-[#C6FF00]'
+                          : 'bg-[#161616] text-white hover:border-[#C6FF00] border-white/10'
+                      }`}
                     >
                       {copiedScriptId === script.id ? (
                         <>
-                          <Check className="w-3.5 h-3.5 text-[#C6FF00]" />
-                          <span className="text-[#C6FF00]">COPIADO</span>
+                          <Check className="w-3.5 h-3.5" />
+                          <span>COPIADO</span>
                         </>
                       ) : (
                         <>
-                          <Copy className="w-3.5 h-3.5 text-white/50" />
+                          <Copy className="w-3.5 h-3.5" />
                           <span>COPIAR</span>
                         </>
                       )}
                     </button>
-
-                    <div className="flex items-center gap-1">
-                      <button
-                        onClick={() => handleOpenEditScript(script)}
-                        className="p-1.5 bg-white/5 hover:bg-white/10 text-white/70 hover:text-[#C6FF00] cursor-pointer"
-                        title="Editar"
-                      >
-                        <Edit2 className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        onClick={() =>
-                          setItemToDelete({
-                            id: script.id,
-                            type: 'script',
-                            title: script.title,
-                          })
-                        }
-                        className="p-1.5 bg-rose-950/20 hover:bg-rose-950/50 text-rose-400 border border-rose-800/30 cursor-pointer"
-                        title="Excluir"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
                   </div>
                 </div>
               ))}
@@ -660,17 +813,194 @@ export function ProjectsServicesView() {
         </div>
       )}
 
+      {/* ======================================================== */}
+      {/* ABA 3: TABELA DE PREÇOS */}
+      {/* ======================================================== */}
+      {activeTab === 'pricing' && (
+        <div className="space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            {/* Busca & Filtros */}
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 flex-1 max-w-xl">
+              <div className="relative flex-1">
+                <Search className="w-4 h-4 text-white/40 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  placeholder="Buscar serviço ou descrição..."
+                  value={priceSearch}
+                  onChange={(e) => setPriceSearch(e.target.value)}
+                  className="w-full bg-[#111111] border border-white/10 pl-9 pr-3 py-2 text-xs font-mono text-white focus:outline-none focus:border-[#C6FF00]"
+                />
+              </div>
+
+              <div className="flex items-center gap-1 overflow-x-auto">
+                <button
+                  onClick={() => setPriceBillingFilter('ALL')}
+                  className={`px-3 py-2 font-mono text-xs font-semibold cursor-pointer border transition-colors ${
+                    priceBillingFilter === 'ALL'
+                      ? 'bg-white/10 border-white/30 text-[#C6FF00]'
+                      : 'bg-transparent border-white/10 text-white/50 hover:text-white'
+                  }`}
+                >
+                  TODOS
+                </button>
+                <button
+                  onClick={() => setPriceBillingFilter('unico')}
+                  className={`px-3 py-2 font-mono text-xs font-semibold cursor-pointer border transition-colors ${
+                    priceBillingFilter === 'unico'
+                      ? 'bg-white/10 border-white/30 text-[#C6FF00]'
+                      : 'bg-transparent border-white/10 text-white/50 hover:text-white'
+                  }`}
+                >
+                  ÚNICO
+                </button>
+                <button
+                  onClick={() => setPriceBillingFilter('mensal')}
+                  className={`px-3 py-2 font-mono text-xs font-semibold cursor-pointer border transition-colors ${
+                    priceBillingFilter === 'mensal'
+                      ? 'bg-white/10 border-white/30 text-[#C6FF00]'
+                      : 'bg-transparent border-white/10 text-white/50 hover:text-white'
+                  }`}
+                >
+                  MENSAL
+                </button>
+              </div>
+            </div>
+
+            <button
+              onClick={handleOpenNewPrice}
+              className="px-4 py-2 bg-[#C6FF00] hover:bg-[#b0e600] text-[#0A0A0A] font-mono font-bold text-xs tracking-wider flex items-center gap-1.5 transition-colors cursor-pointer self-start sm:self-auto"
+            >
+              <Plus className="w-4 h-4 stroke-[2.5]" />
+              <span>+ NOVO SERVIÇO</span>
+            </button>
+          </div>
+
+          <div className="bg-[#111111] border border-white/10 overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs font-mono">
+                <thead className="bg-[#161616] text-white/50 border-b border-white/10 uppercase">
+                  <tr>
+                    <th className="p-3">Serviço</th>
+                    <th className="p-3 hidden md:table-cell">Descrição</th>
+                    <th className="p-3">Preço</th>
+                    <th className="p-3">Cobrança</th>
+                    <th className="p-3">Status</th>
+                    <th className="p-3 hidden sm:table-cell">Responsável</th>
+                    <th className="p-3 text-right w-24">Ações</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/5">
+                  {loadingPrices ? (
+                    <tr>
+                      <td colSpan={7} className="p-8 text-center text-white/40">
+                        Carregando tabela de preços...
+                      </td>
+                    </tr>
+                  ) : filteredPrices.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="p-8 text-center text-white/40">
+                        Nenhum serviço cadastrado na tabela de preços. Clique em "+ NOVO SERVIÇO".
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredPrices.map((item) => (
+                      <tr
+                        key={item.id}
+                        className={`hover:bg-white/[0.02] transition-colors ${
+                          !item.active ? 'opacity-50' : ''
+                        }`}
+                      >
+                        <td className="p-3 font-bold text-white">
+                          <div className="flex items-center gap-2">
+                            <Tag className="w-3.5 h-3.5 text-[#C6FF00]" />
+                            <span>{item.service_name}</span>
+                          </div>
+                        </td>
+                        <td className="p-3 hidden md:table-cell text-white/60 font-sans text-xs max-w-xs truncate">
+                          {item.description || '—'}
+                        </td>
+                        <td className="p-3 font-bold text-[#C6FF00]">
+                          {new Intl.NumberFormat('pt-BR', {
+                            style: 'currency',
+                            currency: 'BRL',
+                          }).format(item.price)}
+                        </td>
+                        <td className="p-3">
+                          <span
+                            className={`px-2 py-0.5 text-[10px] font-mono border ${
+                              item.billing_type === 'mensal'
+                                ? 'bg-purple-950/40 border-purple-500/30 text-purple-300'
+                                : 'bg-cyan-950/40 border-cyan-500/30 text-cyan-300'
+                            }`}
+                          >
+                            {item.billing_type === 'mensal' ? 'Mensal' : 'Pagamento único'}
+                          </span>
+                        </td>
+                        <td className="p-3">
+                          <button
+                            onClick={() => handleTogglePriceActive(item)}
+                            className={`px-2 py-0.5 text-[10px] font-mono cursor-pointer border transition-colors ${
+                              item.active
+                                ? 'bg-emerald-950/40 border-emerald-500/40 text-emerald-400 hover:bg-emerald-900/60'
+                                : 'bg-white/5 border-white/20 text-white/40 hover:bg-white/10'
+                            }`}
+                            title={item.active ? 'Clique para inativar' : 'Clique para ativar'}
+                          >
+                            {item.active ? 'Ativo' : 'Inativo'}
+                          </button>
+                        </td>
+                        <td className="p-3 hidden sm:table-cell text-white/60">
+                          <span className="px-2 py-0.5 bg-white/5 border border-white/10 rounded-none text-[11px]">
+                            {getOperatorName(item.operator_id)}
+                          </span>
+                        </td>
+                        <td className="p-3 text-right">
+                          <div className="flex items-center justify-end gap-1">
+                            <button
+                              onClick={() => handleOpenEditPrice(item)}
+                              className="p-1.5 text-white/60 hover:text-white hover:bg-white/5 cursor-pointer"
+                              title="Editar Serviço"
+                            >
+                              <Edit2 className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={() =>
+                                setItemToDelete({
+                                  id: item.id,
+                                  type: 'price',
+                                  title: item.service_name,
+                                })
+                              }
+                              className="p-1.5 text-white/60 hover:text-rose-400 hover:bg-white/5 cursor-pointer"
+                              title="Excluir Serviço"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ======================================================== */}
       {/* MODAL: TAREFA */}
+      {/* ======================================================== */}
       {isTaskModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm">
           <div className="bg-[#111111] border border-white/20 w-full max-w-md p-5 space-y-4 shadow-2xl">
             <div className="flex items-center justify-between border-b border-white/10 pb-3">
-              <h3 className="font-mono text-sm font-bold text-white">
+              <h3 className="font-mono text-sm font-bold text-white uppercase">
                 {editingTask ? 'Editar Tarefa' : 'Nova Tarefa'}
               </h3>
               <button
                 onClick={() => setIsTaskModalOpen(false)}
-                className="text-white/40 hover:text-white p-1"
+                className="text-white/40 hover:text-white p-1 cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -688,7 +1018,7 @@ export function ProjectsServicesView() {
                 <input
                   type="text"
                   required
-                  placeholder="Ex: Entregar relatório quinzenal de tráfego"
+                  placeholder="Ex: Subir campanha Meta Ads cliente X"
                   value={taskTitle}
                   onChange={(e) => setTaskTitle(e.target.value)}
                   className="w-full bg-[#161616] border border-white/10 px-3 py-2 text-white focus:outline-none focus:border-[#C6FF00]"
@@ -699,7 +1029,7 @@ export function ProjectsServicesView() {
                 <label className="block text-white/60 mb-1">Observação (opcional)</label>
                 <textarea
                   rows={3}
-                  placeholder="Instruções ou links adicionais"
+                  placeholder="Instruções adicionais, prazo, referências..."
                   value={taskNotes}
                   onChange={(e) => setTaskNotes(e.target.value)}
                   className="w-full bg-[#161616] border border-white/10 px-3 py-2 text-white focus:outline-none focus:border-[#C6FF00]"
@@ -727,17 +1057,19 @@ export function ProjectsServicesView() {
         </div>
       )}
 
+      {/* ======================================================== */}
       {/* MODAL: SCRIPT DE VENDA */}
+      {/* ======================================================== */}
       {isScriptModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm">
-          <div className="bg-[#111111] border border-white/20 w-full max-w-xl p-5 space-y-4 shadow-2xl">
+          <div className="bg-[#111111] border border-white/20 w-full max-w-lg p-5 space-y-4 shadow-2xl">
             <div className="flex items-center justify-between border-b border-white/10 pb-3">
-              <h3 className="font-mono text-sm font-bold text-white">
-                {editingScript ? 'Editar Script de Venda' : 'Novo Script de Venda'}
+              <h3 className="font-mono text-sm font-bold text-white uppercase">
+                {editingScript ? 'Editar Script Comercial' : 'Novo Script Comercial'}
               </h3>
               <button
                 onClick={() => setIsScriptModalOpen(false)}
-                className="text-white/40 hover:text-white p-1"
+                className="text-white/40 hover:text-white p-1 cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -756,22 +1088,22 @@ export function ProjectsServicesView() {
                   <input
                     type="text"
                     required
-                    placeholder="Ex: Abordagem Inicial para Clínicas"
+                    placeholder="Ex: Abordagem Fria WhatsApp"
                     value={scriptTitle}
                     onChange={(e) => setScriptTitle(e.target.value)}
                     className="w-full bg-[#161616] border border-white/10 px-3 py-2 text-white focus:outline-none focus:border-[#C6FF00]"
                   />
                 </div>
                 <div>
-                  <label className="block text-white/60 mb-1">Canal *</label>
+                  <label className="block text-white/60 mb-1">Canal de Contato *</label>
                   <select
                     value={scriptChannel}
                     onChange={(e) => setScriptChannel(e.target.value as VultoScriptChannel)}
-                    className="w-full bg-[#161616] border border-white/10 px-3 py-2 text-white focus:outline-none focus:border-[#C6FF00] cursor-pointer"
+                    className="w-full bg-[#161616] border border-white/10 px-3 py-2 text-white focus:outline-none focus:border-[#C6FF00]"
                   >
                     <option value="WhatsApp">WhatsApp</option>
-                    <option value="E-mail">E-mail</option>
-                    <option value="Presencial">Presencial</option>
+                    <option value="Instagram">Instagram</option>
+                    <option value="Email">Email</option>
                   </select>
                 </div>
               </div>
@@ -779,10 +1111,9 @@ export function ProjectsServicesView() {
               <div>
                 <label className="block text-white/60 mb-1">Conteúdo do Script (até 5.000 caracteres) *</label>
                 <textarea
-                  rows={8}
-                  maxLength={5000}
+                  rows={6}
                   required
-                  placeholder="Escreva a mensagem completa, argumentos de contorno de objeções, tom de voz, proposta..."
+                  placeholder="Escreva aqui a mensagem persuasiva..."
                   value={scriptContent}
                   onChange={(e) => setScriptContent(e.target.value)}
                   className="w-full bg-[#161616] border border-white/10 p-3 text-white focus:outline-none focus:border-[#C6FF00] leading-relaxed font-sans"
@@ -813,7 +1144,118 @@ export function ProjectsServicesView() {
         </div>
       )}
 
+      {/* ======================================================== */}
+      {/* MODAL: TABELA DE PREÇOS */}
+      {/* ======================================================== */}
+      {isPriceModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm">
+          <div className="bg-[#111111] border border-white/20 w-full max-w-md p-5 space-y-4 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-white/10 pb-3">
+              <h3 className="font-mono text-sm font-bold text-white uppercase">
+                {editingPrice ? 'Editar Serviço' : 'Novo Serviço'}
+              </h3>
+              <button
+                onClick={() => setIsPriceModalOpen(false)}
+                className="text-white/40 hover:text-white p-1 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {priceError && (
+              <div className="p-2.5 bg-rose-950/40 border border-rose-500/40 text-rose-300 text-xs font-mono">
+                {priceError}
+              </div>
+            )}
+
+            <form onSubmit={handleSubmitPrice} className="space-y-3 font-mono text-xs">
+              <div>
+                <label className="block text-white/60 mb-1">NOME DO SERVIÇO *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Ex: VULTO Site Institucional"
+                  value={priceServiceName}
+                  onChange={(e) => setPriceServiceName(e.target.value)}
+                  className="w-full bg-[#161616] border border-white/10 px-3 py-2 text-white focus:outline-none focus:border-[#C6FF00]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-white/60 mb-1">DESCRIÇÃO</label>
+                <input
+                  type="text"
+                  placeholder="Ex: Criação de site profissional responsivo"
+                  value={priceDescription}
+                  onChange={(e) => setPriceDescription(e.target.value)}
+                  className="w-full bg-[#161616] border border-white/10 px-3 py-2 text-white focus:outline-none focus:border-[#C6FF00]"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-white/60 mb-1">PREÇO (R$) *</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    required
+                    placeholder="797"
+                    value={priceValue}
+                    onChange={(e) => setPriceValue(e.target.value)}
+                    className="w-full bg-[#161616] border border-white/10 px-3 py-2 text-white focus:outline-none focus:border-[#C6FF00]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-white/60 mb-1">TIPO DE COBRANÇA *</label>
+                  <select
+                    value={priceBillingType}
+                    onChange={(e) => setPriceBillingType(e.target.value as VultoBillingType)}
+                    className="w-full bg-[#161616] border border-white/10 px-3 py-2 text-white focus:outline-none focus:border-[#C6FF00] cursor-pointer"
+                  >
+                    <option value="unico">Pagamento único</option>
+                    <option value="mensal">Mensal</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 pt-1">
+                <input
+                  type="checkbox"
+                  id="priceActiveCheck"
+                  checked={priceActive}
+                  onChange={(e) => setPriceActive(e.target.checked)}
+                  className="w-4 h-4 accent-[#C6FF00] bg-[#161616] border-white/10 cursor-pointer"
+                />
+                <label htmlFor="priceActiveCheck" className="text-white/80 cursor-pointer">
+                  Serviço Ativo
+                </label>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-white/10">
+                <button
+                  type="button"
+                  onClick={() => setIsPriceModalOpen(false)}
+                  className="px-3 py-1.5 bg-white/5 text-white/70 hover:text-white cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmittingPrice}
+                  className="px-4 py-1.5 bg-[#C6FF00] hover:bg-[#b0e600] text-[#0A0A0A] font-bold cursor-pointer"
+                >
+                  {isSubmittingPrice ? 'Salvando...' : 'Salvar'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ======================================================== */}
       {/* MODAL DE CONFIRMAÇÃO DE EXCLUSÃO */}
+      {/* ======================================================== */}
       {itemToDelete && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm">
           <div className="bg-[#111111] border border-rose-500/40 w-full max-w-sm p-5 space-y-4 shadow-2xl">
@@ -828,7 +1270,7 @@ export function ProjectsServicesView() {
                 type="button"
                 onClick={() => setItemToDelete(null)}
                 disabled={isDeleting}
-                className="px-3 py-1.5 bg-white/5 text-white/70 hover:text-white font-mono text-xs"
+                className="px-3 py-1.5 bg-white/5 text-white/70 hover:text-white font-mono text-xs cursor-pointer"
               >
                 Cancelar
               </button>
@@ -836,7 +1278,7 @@ export function ProjectsServicesView() {
                 type="button"
                 onClick={handleConfirmDelete}
                 disabled={isDeleting}
-                className="px-4 py-1.5 bg-rose-600 hover:bg-rose-700 text-white font-mono text-xs font-bold"
+                className="px-4 py-1.5 bg-rose-600 hover:bg-rose-700 text-white font-mono text-xs font-bold cursor-pointer"
               >
                 {isDeleting ? 'Excluindo...' : 'Sim, Excluir'}
               </button>
