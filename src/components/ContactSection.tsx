@@ -1,8 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
-import { ArrowUpRight, Check, AlertCircle, RotateCcw } from 'lucide-react';
+import { ArrowUpRight, Check, AlertCircle, RotateCcw, Mail, Copy } from 'lucide-react';
 import { BRAND_CONFIG, DirectTeamContact } from '../data/siteData';
 import { useLanguage } from '../context/LanguageContext';
+
+const CONTACT_EMAILS: Record<string, string> = {
+  felipe: 'felipe@vultolab.company',
+  pietro: 'pietro@vultolab.company',
+};
 
 export interface ContactFormPayload {
   nome: string;
@@ -43,6 +48,47 @@ export const ContactSection: React.FC<ContactSectionProps> = ({
   const [submitError, setSubmitError] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  const handleCopyEmail = async (emailText: string, contactId: string) => {
+    try {
+      if (navigator?.clipboard?.writeText) {
+        await navigator.clipboard.writeText(emailText);
+      } else {
+        const textarea = document.createElement('textarea');
+        textarea.value = emailText;
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = '0';
+        document.body.appendChild(textarea);
+        textarea.focus();
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
+      }
+      setCopiedId(contactId);
+      setTimeout(() => {
+        setCopiedId((prev) => (prev === contactId ? null : prev));
+      }, 2000);
+    } catch {
+      try {
+        const textarea = document.createElement('textarea');
+        textarea.value = emailText;
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = '0';
+        document.body.appendChild(textarea);
+        textarea.focus();
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
+        setCopiedId(contactId);
+        setTimeout(() => {
+          setCopiedId((prev) => (prev === contactId ? null : prev));
+        }, 2000);
+      } catch {
+        // Fallback silencioso sem alert
+      }
+    }
+  };
 
   useEffect(() => {
     if (initialService && cs.serviceOptions.includes(initialService)) {
@@ -179,53 +225,129 @@ export const ContactSection: React.FC<ContactSectionProps> = ({
 
         {/* 2. CARDS DE ATENDIMENTO DIRETO (FELIPE & PIETRO) */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 lg:gap-8 mb-8">
-          {directContacts.map((contact) => (
-            <motion.div
-              key={contact.id}
-              initial={{ opacity: 0, y: 16 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              transition={{ duration: 0.4 }}
-              className="border border-[#F4F4F1]/15 bg-[#121212] p-6 sm:p-8 flex flex-col justify-between hover:border-[#C6FF00] transition-colors duration-200 group relative"
-            >
-              <div>
-                <div className="flex items-center justify-between gap-4 pb-4 mb-6 border-b border-[#F4F4F1]/10">
-                  <div className="flex items-center gap-2.5">
-                    <span className="p-1.5 bg-[#C6FF00]/10 text-[#C6FF00]">
-                      <WhatsappIcon className="w-4 h-4" />
-                    </span>
-                    <span className="font-mono-tabular text-xs font-semibold uppercase tracking-[0.12em] text-[#C6FF00]">
-                      WHATSAPP
+          {directContacts.map((contact) => {
+            const emailAddress =
+              CONTACT_EMAILS[contact.id] ||
+              (contact.id.toLowerCase().includes('pietro')
+                ? 'pietro@vultolab.company'
+                : 'felipe@vultolab.company');
+            const isCopied = copiedId === contact.id;
+            const isPietro = contact.id.toLowerCase().includes('pietro');
+            const desktopWhatsAppText = isPietro
+              ? 'FALAR COM PIETRO NO WHATSAPP'
+              : 'FALAR COM FELIPE NO WHATSAPP';
+            const mobileWhatsAppText = isPietro
+              ? 'WHATSAPP PIETRO'
+              : 'WHATSAPP FELIPE';
+
+            return (
+              <motion.div
+                key={contact.id}
+                initial={{ opacity: 0, y: 16 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ duration: 0.4 }}
+                className="border border-[#F4F4F1]/15 bg-[#121212] p-6 sm:p-8 flex flex-col justify-between hover:border-[#C6FF00] transition-colors duration-200 group relative"
+              >
+                <div>
+                  <div className="flex items-center justify-between gap-4 pb-4 mb-6 border-b border-[#F4F4F1]/10">
+                    <div className="flex items-center gap-2.5">
+                      <span className="p-1.5 bg-[#C6FF00]/10 text-[#C6FF00]">
+                        <WhatsappIcon className="w-4 h-4" />
+                      </span>
+                      <span className="font-mono-tabular text-xs font-semibold uppercase tracking-[0.12em] text-[#C6FF00]">
+                        WHATSAPP
+                      </span>
+                    </div>
+                    <span className="font-mono-tabular text-xs font-medium text-[#F4F4F1]/60">
+                      {contact.phoneFormatted}
                     </span>
                   </div>
-                  <span className="font-mono-tabular text-xs font-medium text-[#F4F4F1]/60">
-                    {contact.phoneFormatted}
-                  </span>
+
+                  <h3 className="font-display font-bold text-2xl sm:text-3xl uppercase tracking-[-0.02em] text-[#F4F4F1] mb-3">
+                    {contact.cardTitle}
+                  </h3>
+
+                  <p className="text-sm sm:text-base text-[#F4F4F1]/80 leading-relaxed mb-6 font-light">
+                    {contact.desc}
+                  </p>
                 </div>
 
-                <h3 className="font-display font-bold text-2xl sm:text-3xl uppercase tracking-[-0.02em] text-[#F4F4F1] mb-3">
-                  {contact.cardTitle}
-                </h3>
+                <div className="space-y-4">
+                  {/* Botão principal de WhatsApp */}
+                  <a
+                    href={contact.link}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    data-cursor="cta"
+                    className="inline-flex items-center justify-between w-full px-5 sm:px-6 py-4 bg-[#C6FF00] text-[#0A0A0A] font-bold text-xs sm:text-sm uppercase tracking-[0.08em] sm:tracking-[0.1em] hover:bg-[#d4ff33] transition-colors group/btn cursor-pointer"
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <WhatsappIcon className="w-4 h-4 shrink-0 text-[#0A0A0A]" />
+                      <span className="hidden sm:inline truncate">{desktopWhatsAppText}</span>
+                      <span className="sm:hidden truncate">{mobileWhatsAppText}</span>
+                    </div>
+                    <ArrowUpRight className="w-4 h-4 stroke-[2.5] shrink-0 group-hover/btn:translate-x-0.5 group-hover/btn:-translate-y-0.5 transition-transform ml-2" />
+                  </a>
 
-                <p className="text-sm sm:text-base text-[#F4F4F1]/80 leading-relaxed mb-8">
-                  {contact.desc}
-                </p>
-              </div>
+                  {/* Bloco secundário de contato por E-mail */}
+                  <div className="border border-[#F4F4F1]/12 bg-[#0A0A0A]/70 p-4 transition-colors">
+                    <div className="flex items-center justify-between gap-2 mb-2 pb-2 border-b border-[#F4F4F1]/8">
+                      <div className="flex items-center gap-2">
+                        <Mail className="w-3.5 h-3.5 text-[#F4F4F1]/60" />
+                        <span className="font-mono-tabular text-[10px] sm:text-[11px] font-semibold uppercase tracking-[0.14em] text-[#F4F4F1]/60">
+                          E-MAIL
+                        </span>
+                      </div>
+                      <span className="font-mono-tabular text-[10px] uppercase tracking-[0.12em] text-[#F4F4F1]/40">
+                        DIRETO
+                      </span>
+                    </div>
 
-              <div>
-                <a
-                  href={contact.link}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  data-cursor="cta"
-                  className="inline-flex items-center justify-between w-full px-6 py-4 bg-[#C6FF00] text-[#0A0A0A] font-bold text-xs sm:text-sm uppercase tracking-[0.1em] hover:bg-[#d4ff33] transition-colors group/btn cursor-pointer"
-                >
-                  <span>{contact.buttonText}</span>
-                  <ArrowUpRight className="w-4 h-4 stroke-[2.5] group-hover/btn:translate-x-0.5 group-hover/btn:-translate-y-0.5 transition-transform" />
-                </a>
-              </div>
-            </motion.div>
-          ))}
+                    <p className="font-mono-tabular text-xs sm:text-sm text-[#F4F4F1] font-medium tracking-tight mb-3 break-all select-all">
+                      {emailAddress}
+                    </p>
+
+                    <div className="grid grid-cols-2 gap-2 pt-1">
+                      {/* Ação 1: Enviar E-mail */}
+                      <a
+                        href={`mailto:${emailAddress}`}
+                        className="inline-flex items-center justify-center gap-1.5 px-3 py-2 bg-[#F4F4F1]/5 hover:bg-[#F4F4F1]/10 text-[#F4F4F1]/85 hover:text-[#F4F4F1] border border-[#F4F4F1]/15 hover:border-[#F4F4F1]/30 text-[11px] font-mono-tabular font-semibold uppercase tracking-[0.08em] transition-all cursor-pointer"
+                      >
+                        <Mail className="w-3 h-3 text-[#F4F4F1]/70" />
+                        <span>ENVIAR E-MAIL</span>
+                      </a>
+
+                      {/* Ação 2: Copiar E-mail */}
+                      <button
+                        type="button"
+                        onClick={() => handleCopyEmail(emailAddress, contact.id)}
+                        className={`inline-flex items-center justify-center gap-1.5 px-3 py-2 border text-[11px] font-mono-tabular font-semibold uppercase tracking-[0.08em] transition-all cursor-pointer ${
+                          isCopied
+                            ? 'bg-[#C6FF00]/15 text-[#C6FF00] border-[#C6FF00]/60'
+                            : 'bg-[#F4F4F1]/5 hover:bg-[#F4F4F1]/10 text-[#F4F4F1]/85 hover:text-[#F4F4F1] border-[#F4F4F1]/15 hover:border-[#F4F4F1]/30'
+                        }`}
+                        title="Copiar e-mail para a área de transferência"
+                        aria-label={`Copiar e-mail de ${contact.name}`}
+                      >
+                        {isCopied ? (
+                          <>
+                            <Check className="w-3 h-3 text-[#C6FF00]" />
+                            <span className="text-[#C6FF00]">COPIADO!</span>
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="w-3 h-3 text-[#F4F4F1]/70" />
+                            <span>COPIAR</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </motion.div>
+            );
+          })}
         </div>
 
         {/* 3. TEXTO DE APOIO */}
