@@ -38,6 +38,16 @@ import {
   VultoProspectInteraction,
   ProspectStatus,
   ProspectPriority,
+  VALID_PROSPECT_PRIORITIES,
+  normalizeProspectPriority,
+  VALID_PROSPECT_STATUSES,
+  normalizeProspectStatus,
+  VALID_PROSPECT_SOURCES,
+  normalizeProspectSource,
+  ProspectSource,
+  VALID_PROSPECT_SERVICES,
+  normalizeProspectService,
+  ProspectServiceInterest,
   InteractionType,
   VultoClientServiceType,
   VultoOperator,
@@ -76,15 +86,15 @@ export const PROSPECT_STATUSES: {
     borderColor: 'border-blue-500/30',
   },
   {
-    id: 'em_contato',
+    id: 'contato_enviado',
     label: 'PRIMEIRO CONTATO',
     badgeBg: 'bg-amber-500/10',
     badgeText: 'text-amber-400',
     borderColor: 'border-amber-500/30',
   },
   {
-    id: 'reuniao_agendada',
-    label: 'REUNIÃO AGENDADA',
+    id: 'interessado',
+    label: 'INTERESSADO / REUNIÃO',
     badgeBg: 'bg-purple-500/10',
     badgeText: 'text-purple-400',
     borderColor: 'border-purple-500/30',
@@ -116,11 +126,21 @@ export const PRIORITY_CONFIG: Record<
   ProspectPriority,
   { label: string; bg: string; text: string; border: string }
 > = {
-  baixa: { label: 'BAIXA', bg: 'bg-white/5', text: 'text-white/60', border: 'border-white/10' },
-  media: { label: 'MÉDIA', bg: 'bg-blue-500/10', text: 'text-blue-400', border: 'border-blue-500/30' },
-  alta: { label: 'ALTA', bg: 'bg-amber-500/10', text: 'text-amber-400', border: 'border-amber-500/30' },
-  urgente: { label: 'URGENTE', bg: 'bg-rose-500/15', text: 'text-rose-400', border: 'border-rose-500/40' },
+  frio: { label: 'FRIO', bg: 'bg-blue-500/10', text: 'text-blue-400', border: 'border-blue-500/30' },
+  morno: { label: 'MORNO', bg: 'bg-amber-500/10', text: 'text-amber-400', border: 'border-amber-500/30' },
+  quente: { label: 'QUENTE', bg: 'bg-rose-500/15', text: 'text-rose-400', border: 'border-rose-500/40' },
 };
+
+export const PRIORITY_OPTIONS: { value: ProspectPriority; label: string }[] = [
+  { value: 'frio', label: 'Frio' },
+  { value: 'morno', label: 'Morno' },
+  { value: 'quente', label: 'Quente' },
+];
+
+export function getPriorityStyle(raw?: string | null) {
+  const norm = normalizeProspectPriority(raw);
+  return PRIORITY_CONFIG[norm] || PRIORITY_CONFIG.frio;
+}
 
 export const INTERACTION_TYPE_CONFIG: Record<
   InteractionType,
@@ -260,7 +280,7 @@ export function ProspectsView() {
   const [companyName, setCompanyName] = useState('');
   const [channel, setChannel] = useState<ProspectChannel>('whatsapp');
   const [contactReference, setContactReference] = useState('');
-  const [status, setStatus] = useState<ProspectStatus>('em_contato');
+  const [status, setStatus] = useState<ProspectStatus>('novo');
   const [nextContactAt, setNextContactAt] = useState('');
   const [initialNote, setInitialNote] = useState('');
 
@@ -272,9 +292,9 @@ export function ProspectsView() {
   const [instagram, setInstagram] = useState('');
   const [city, setCity] = useState('');
   const [state, setState] = useState('');
-  const [source, setSource] = useState('Outbound');
-  const [serviceInterest, setServiceInterest] = useState('Tráfego Pago');
-  const [priority, setPriority] = useState<ProspectPriority>('media');
+  const [source, setSource] = useState<ProspectSource>('manual');
+  const [serviceInterest, setServiceInterest] = useState<ProspectServiceInterest>('site');
+  const [priority, setPriority] = useState<ProspectPriority>('frio');
   const [proposalAmount, setProposalAmount] = useState<string>('');
   const [lossReason, setLossReason] = useState('');
 
@@ -531,8 +551,8 @@ export function ProspectsView() {
         }
       }
 
-      if (statusFilter !== 'ALL' && p.status !== statusFilter) return false;
-      if (priorityFilter !== 'ALL' && p.priority !== priorityFilter) return false;
+      if (statusFilter !== 'ALL' && normalizeProspectStatus(p.status) !== statusFilter) return false;
+      if (priorityFilter !== 'ALL' && normalizeProspectPriority(p.priority) !== priorityFilter) return false;
       if (operatorFilter !== 'ALL' && p.operator_id !== operatorFilter) return false;
 
       if (followUpFilter !== 'ALL') {
@@ -550,12 +570,12 @@ export function ProspectsView() {
     setCompanyName('');
     setChannel('whatsapp');
     setContactReference('');
-    setStatus('em_contato'); // Padrão: Primeiro Contato
+    setStatus('novo'); // Padrão: Novo lead
     setNextContactAt('');
     setInitialNote('');
     setShowAdvancedFields(false);
 
-    // Limpar campos avançados
+    // Limpar campos avançados garantindo conformidade com CHECK constraints
     setContactName('');
     setEmail('');
     setPhone('');
@@ -563,9 +583,9 @@ export function ProspectsView() {
     setInstagram('');
     setCity('');
     setState('');
-    setSource('Outbound');
-    setServiceInterest('Tráfego Pago');
-    setPriority('media');
+    setSource('manual');
+    setServiceInterest('site');
+    setPriority('frio'); // Forçado para 'frio' no cadastro rápido
     setProposalAmount('');
     setLossReason('');
     setFormError(null);
@@ -578,7 +598,7 @@ export function ProspectsView() {
     setCompanyName(p.company_name);
     setChannel(normalizeProspectChannel(p.channel));
     setContactReference(p.contact_name || p.phone || p.email || p.instagram || '');
-    setStatus(p.status);
+    setStatus(normalizeProspectStatus(p.status));
     setNextContactAt(p.next_contact_at ? p.next_contact_at.slice(0, 16) : '');
     setInitialNote(p.notes || '');
 
@@ -590,9 +610,9 @@ export function ProspectsView() {
     setInstagram(p.instagram || '');
     setCity(p.city || '');
     setState(p.state || '');
-    setSource(p.source || 'Outbound');
-    setServiceInterest(p.service_interest || 'Tráfego Pago');
-    setPriority(p.priority || 'media');
+    setSource(normalizeProspectSource(p.source));
+    setServiceInterest(normalizeProspectService(p.service_interest));
+    setPriority(normalizeProspectPriority(p.priority));
     setProposalAmount(p.proposal_amount ? String(p.proposal_amount) : '');
     setLossReason(p.loss_reason || '');
     setShowAdvancedFields(true); // Na edição, expõe campos completos
@@ -651,7 +671,20 @@ export function ProspectsView() {
       return;
     }
 
-    console.log('CHANNEL ENVIADO AO SUPABASE:', finalChannel);
+    // Garantia de integridade estrita conforme CHECK CONSTRAINTS do Supabase:
+    // Todo NOVO prospect nasce automaticamente como priority = 'frio', status = 'novo', source = 'manual', service_interest = 'site'
+    const finalPriority: ProspectPriority = editingProspect
+      ? normalizeProspectPriority(priority)
+      : 'frio';
+    const finalStatus: ProspectStatus = editingProspect
+      ? normalizeProspectStatus(status)
+      : 'novo';
+    const finalSource: ProspectSource = editingProspect
+      ? normalizeProspectSource(source)
+      : 'manual';
+    const finalServiceInterest: ProspectServiceInterest = editingProspect
+      ? normalizeProspectService(serviceInterest)
+      : 'site';
 
     const payload: Partial<VultoProspect> = {
       company_name: companyName.trim(),
@@ -663,14 +696,14 @@ export function ProspectsView() {
       website: website.trim() || null,
       city: city.trim() || null,
       state: state.trim() || null,
-      source: source.trim() || 'Outbound',
-      service_interest: serviceInterest.trim() || 'Tráfego Pago',
-      status,
-      priority,
+      source: finalSource,
+      service_interest: finalServiceInterest,
+      status: finalStatus,
+      priority: finalPriority,
       proposal_amount: proposalAmount ? parseFloat(proposalAmount) : null,
       next_contact_at: nextContactAt ? new Date(nextContactAt).toISOString() : null,
       notes: initialNote.trim() || null,
-      loss_reason: status === 'perdido' ? lossReason.trim() || null : null,
+      loss_reason: finalStatus === 'perdido' ? lossReason.trim() || null : null,
     };
 
     try {
@@ -729,6 +762,37 @@ export function ProspectsView() {
       if (selectedProspect && selectedProspect.id === prospectId) {
         setSelectedProspect((prev) => (prev ? { ...prev, status: newStatus } : null));
       }
+    }
+  };
+
+  // Alterar Prioridade Rapidamente (Frio -> 'frio', Morno -> 'morno', Quente -> 'quente')
+  const handleQuickPriorityChange = async (
+    prospectId: string,
+    newPriority: ProspectPriority,
+    e?: React.MouseEvent
+  ) => {
+    if (e) e.stopPropagation();
+    const prevPriority = selectedProspect?.priority;
+
+    // Atualização otimista
+    setProspects((prev) =>
+      prev.map((item) => (item.id === prospectId ? { ...item, priority: newPriority } : item))
+    );
+    if (selectedProspect && selectedProspect.id === prospectId) {
+      setSelectedProspect((prev) => (prev ? { ...prev, priority: newPriority } : null));
+    }
+
+    const res = await updateVultoProspect(prospectId, { priority: newPriority });
+    if (res.error) {
+      showToast(`Erro ao alterar prioridade: ${res.error}`, 'error');
+      if (prevPriority) {
+        setProspects((prev) =>
+          prev.map((item) => (item.id === prospectId ? { ...item, priority: prevPriority } : item))
+        );
+      }
+    } else {
+      const pLabel = PRIORITY_CONFIG[newPriority]?.label || newPriority.toUpperCase();
+      showToast(`Prioridade alterada para "${pLabel}"`);
     }
   };
 
@@ -1139,7 +1203,7 @@ export function ProspectsView() {
                   ) : (
                     columnProspects.map((p) => {
                       const followUpSt = getFollowUpStatus(p.next_contact_at);
-                      const priorityStyle = PRIORITY_CONFIG[p.priority] || PRIORITY_CONFIG.media;
+                      const priorityStyle = getPriorityStyle(p.priority);
 
                       return (
                         <div
@@ -1147,14 +1211,21 @@ export function ProspectsView() {
                           onClick={() => setSelectedProspect(p)}
                           className="bg-[#161616] hover:bg-[#1a1a1a] border border-white/10 hover:border-white/20 p-3 transition-all cursor-pointer group space-y-2.5 relative"
                         >
-                          {/* Topo do card: Nome + Canal */}
+                          {/* Topo do card: Nome + Canal + Prioridade */}
                           <div className="flex items-start justify-between gap-1">
                             <h3 className="font-mono text-xs font-bold text-white group-hover:text-[#C6FF00] transition-colors line-clamp-1">
                               {p.company_name}
                             </h3>
-                            <span className="text-[9px] font-mono px-1.5 py-0.5 border border-white/10 bg-white/5 text-white/70 shrink-0">
-                              {getChannelLabel(p.channel)}
-                            </span>
+                            <div className="flex items-center gap-1 shrink-0">
+                              <span className="text-[9px] font-mono px-1.5 py-0.5 border border-white/10 bg-white/5 text-white/70">
+                                {getChannelLabel(p.channel)}
+                              </span>
+                              <span
+                                className={`text-[9px] font-mono font-bold px-1.5 py-0.5 border ${priorityStyle.bg} ${priorityStyle.text} ${priorityStyle.border}`}
+                              >
+                                {priorityStyle.label}
+                              </span>
+                            </div>
                           </div>
 
                           {/* Contato Principal / Referência */}
@@ -1272,6 +1343,7 @@ export function ProspectsView() {
               <tr className="border-b border-white/10 bg-[#161616] text-[10px] text-white/50 tracking-wider">
                 <th className="p-3">EMPRESA / CONTA</th>
                 <th className="p-3">CANAL</th>
+                <th className="p-3">PRIORIDADE</th>
                 <th className="p-3">CONTATO / REF</th>
                 <th className="p-3">ESTÁGIO</th>
                 <th className="p-3">PRÓX. FOLLOW-UP</th>
@@ -1307,6 +1379,19 @@ export function ProspectsView() {
                       <span className="px-2 py-0.5 border border-white/10 bg-white/5 text-[10px]">
                         {getChannelLabel(p.channel)}
                       </span>
+                    </td>
+
+                    <td className="p-3">
+                      {(() => {
+                        const prioCfg = getPriorityStyle(p.priority);
+                        return (
+                          <span
+                            className={`inline-block px-2 py-0.5 border text-[10px] font-mono font-bold ${prioCfg.bg} ${prioCfg.text} ${prioCfg.border}`}
+                          >
+                            {prioCfg.label}
+                          </span>
+                        );
+                      })()}
                     </td>
 
                     <td className="p-3 text-white/80 font-sans text-xs">
@@ -1449,7 +1534,7 @@ export function ProspectsView() {
                 <span className="text-[10px] text-white/40">FASE DO FUNIL:</span>
                 <div className="grid grid-cols-3 gap-1.5">
                   {PROSPECT_STATUSES.map((st) => {
-                    const isActive = selectedProspect.status === st.id;
+                    const isActive = normalizeProspectStatus(selectedProspect.status) === st.id;
                     return (
                       <button
                         key={st.id}
@@ -1466,6 +1551,31 @@ export function ProspectsView() {
                   })}
                 </div>
               </div>
+
+              {/* Seletor de Prioridade no Drawer (Frio / Morno / Quente) */}
+              <div className="space-y-1.5 pt-2 border-t border-white/5">
+                <span className="text-[10px] text-white/40">PRIORIDADE COMERCIAL:</span>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {PRIORITY_OPTIONS.map((po) => {
+                    const isPrioActive = normalizeProspectPriority(selectedProspect.priority) === po.value;
+                    const pCfg = PRIORITY_CONFIG[po.value];
+                    return (
+                      <button
+                        key={po.value}
+                        type="button"
+                        onClick={() => handleQuickPriorityChange(selectedProspect.id, po.value)}
+                        className={`px-2 py-1.5 text-[10px] font-mono font-bold border transition-all cursor-pointer ${
+                          isPrioActive
+                            ? `${pCfg.bg} ${pCfg.text} ${pCfg.border} shadow-xs`
+                            : 'bg-white/5 text-white/40 border-white/10 hover:text-white'
+                        }`}
+                      >
+                        {pCfg.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
             </div>
 
             {/* Conteúdo Principal do Drawer */}
@@ -1474,9 +1584,19 @@ export function ProspectsView() {
               <div className="bg-[#121212] border border-white/10 p-4 space-y-3">
                 <div className="flex items-center justify-between">
                   <div className="text-[10px] text-white/40 tracking-wider">DADOS E FOLLOW-UP</div>
-                  <span className="px-2 py-0.5 bg-white/5 border border-white/10 text-white/60 text-[10px]">
-                    Canal: {getChannelLabel(selectedProspect.channel)}
-                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <span className="px-2 py-0.5 bg-white/5 border border-white/10 text-white/60 text-[10px]">
+                      Canal: {getChannelLabel(selectedProspect.channel)}
+                    </span>
+                    {(() => {
+                      const pSt = getPriorityStyle(selectedProspect.priority);
+                      return (
+                        <span className={`px-2 py-0.5 border text-[10px] font-mono font-bold ${pSt.bg} ${pSt.text} ${pSt.border}`}>
+                          {pSt.label}
+                        </span>
+                      );
+                    })()}
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-3 text-white/80">
@@ -2024,25 +2144,29 @@ export function ProspectsView() {
                         <label className="text-[10px] text-white/50 block mb-1">
                           SERVIÇO DE INTERESSE
                         </label>
-                        <input
-                          type="text"
-                          placeholder="Tráfego Pago / NFC"
+                        <select
                           value={serviceInterest}
-                          onChange={(e) => setServiceInterest(e.target.value)}
-                          className="w-full bg-[#181818] border border-white/10 px-2.5 py-1.5 text-white focus:border-[#C6FF00] outline-none"
-                        />
+                          onChange={(e) => setServiceInterest(e.target.value as any)}
+                          className="w-full bg-[#181818] border border-white/10 px-2.5 py-1.5 text-white focus:border-[#C6FF00] outline-none text-xs cursor-pointer"
+                        >
+                          <option value="site">Site / Sistema</option>
+                          <option value="trafego_meta">Tráfego Meta</option>
+                          <option value="trafego_google">Tráfego Google</option>
+                          <option value="trafego_ambos">Tráfego Ambos (Meta + Google)</option>
+                          <option value="vulto_nfc">VULTO NFC</option>
+                          <option value="outro">Outro</option>
+                        </select>
                       </div>
                       <div>
                         <label className="text-[10px] text-white/50 block mb-1">PRIORIDADE</label>
                         <select
                           value={priority}
                           onChange={(e) => setPriority(e.target.value as any)}
-                          className="w-full bg-[#181818] border border-white/10 px-2 py-1.5 text-white focus:border-[#C6FF00] outline-none cursor-pointer"
+                          className="w-full bg-[#181818] border border-white/10 px-2 py-1.5 text-white focus:border-[#C6FF00] outline-none cursor-pointer text-xs"
                         >
-                          <option value="baixa">BAIXA</option>
-                          <option value="media">MÉDIA</option>
-                          <option value="alta">ALTA</option>
-                          <option value="urgente">URGENTE</option>
+                          <option value="frio">Frio</option>
+                          <option value="morno">Morno</option>
+                          <option value="quente">Quente</option>
                         </select>
                       </div>
                     </div>

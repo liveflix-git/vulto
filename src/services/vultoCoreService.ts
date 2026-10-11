@@ -116,15 +116,103 @@ export interface VultoAuditLogItem {
 // TIPOS PROSPECÇÃO / MINI CRM
 // =====================================================================
 
-export type ProspectStatus =
-  | 'novo'
-  | 'em_contato'
-  | 'reuniao_agendada'
-  | 'proposta_enviada'
-  | 'fechado'
-  | 'perdido';
+export const VALID_PROSPECT_STATUSES = [
+  'novo',
+  'contato_enviado',
+  'followup_1',
+  'followup_2',
+  'respondeu',
+  'interessado',
+  'proposta_enviada',
+  'negociacao',
+  'fechado',
+  'perdido',
+] as const;
 
-export type ProspectPriority = 'baixa' | 'media' | 'alta' | 'urgente';
+export type ProspectStatus =
+  | (typeof VALID_PROSPECT_STATUSES)[number]
+  | 'em_contato'
+  | 'reuniao_agendada';
+
+export function normalizeProspectStatus(raw?: string | null): (typeof VALID_PROSPECT_STATUSES)[number] {
+  if (!raw) return 'novo';
+  const clean = raw.trim().toLowerCase();
+  if ((VALID_PROSPECT_STATUSES as readonly string[]).includes(clean)) {
+    return clean as (typeof VALID_PROSPECT_STATUSES)[number];
+  }
+  if (clean === 'em_contato') return 'contato_enviado';
+  if (clean === 'reuniao_agendada') return 'interessado';
+  return 'novo';
+}
+
+export const VALID_PROSPECT_PRIORITIES = [
+  'frio',
+  'morno',
+  'quente',
+] as const;
+
+export type ProspectPriority = (typeof VALID_PROSPECT_PRIORITIES)[number];
+
+export function normalizeProspectPriority(raw?: string | null): ProspectPriority {
+  if (!raw) return 'frio';
+  const clean = raw.trim().toLowerCase();
+  if (clean === 'frio') return 'frio';
+  if (clean === 'morno') return 'morno';
+  if (clean === 'quente') return 'quente';
+  if (clean === 'baixa') return 'frio';
+  if (clean === 'media' || clean === 'média') return 'morno';
+  if (clean === 'alta' || clean === 'urgente') return 'quente';
+  return 'frio';
+}
+
+export const VALID_PROSPECT_SOURCES = [
+  'manual',
+  'google_maps',
+  'apify',
+  'indicacao',
+  'instagram',
+  'outro',
+] as const;
+
+export type ProspectSource = (typeof VALID_PROSPECT_SOURCES)[number];
+
+export function normalizeProspectSource(raw?: string | null): ProspectSource {
+  if (!raw) return 'manual';
+  const clean = raw.trim().toLowerCase();
+  if ((VALID_PROSPECT_SOURCES as readonly string[]).includes(clean)) {
+    return clean as ProspectSource;
+  }
+  if (clean === 'outbound') return 'manual';
+  if (clean.includes('maps') || clean.includes('google')) return 'google_maps';
+  if (clean.includes('apify')) return 'apify';
+  if (clean.includes('indica')) return 'indicacao';
+  if (clean.includes('insta')) return 'instagram';
+  return 'manual';
+}
+
+export const VALID_PROSPECT_SERVICES = [
+  'site',
+  'trafego_meta',
+  'trafego_google',
+  'trafego_ambos',
+  'vulto_nfc',
+  'outro',
+] as const;
+
+export type ProspectServiceInterest = (typeof VALID_PROSPECT_SERVICES)[number];
+
+export function normalizeProspectService(raw?: string | null): ProspectServiceInterest {
+  if (!raw) return 'site';
+  const clean = raw.trim().toLowerCase();
+  if ((VALID_PROSPECT_SERVICES as readonly string[]).includes(clean)) {
+    return clean as ProspectServiceInterest;
+  }
+  if (clean.includes('meta') || clean.includes('tráfego') || clean.includes('trafego')) return 'trafego_meta';
+  if (clean.includes('google')) return 'trafego_google';
+  if (clean.includes('nfc')) return 'vulto_nfc';
+  if (clean.includes('site') || clean.includes('sistema')) return 'site';
+  return 'site';
+}
 
 export const VALID_PROSPECT_CHANNELS = [
   'email',
@@ -1202,15 +1290,21 @@ export async function createVultoProspect(payload: {
   source?: string | null;
   channel?: string | null;
   service_interest?: string | null;
-  status?: ProspectStatus;
-  priority?: ProspectPriority;
+  status?: string | null;
+  priority?: string | null;
   last_contact_at?: string | null;
   next_contact_at?: string | null;
   proposal_amount?: number | null;
   notes?: string | null;
 }): Promise<{ data: VultoProspect | null; error: string | null }> {
   const op = getActiveOperatorSession();
-  const validChannel = payload.channel ? normalizeProspectChannel(payload.channel) : 'whatsapp';
+  const validChannel = normalizeProspectChannel(payload.channel);
+  // Regra Estrita do Banco: Todo novo prospect nasce como 'frio'
+  const validPriority: ProspectPriority = 'frio';
+  const validStatus = normalizeProspectStatus(payload.status || 'novo');
+  const validSource = normalizeProspectSource(payload.source || 'manual');
+  const validService = normalizeProspectService(payload.service_interest || 'site');
+
   const insertPayload = {
     company_name: payload.company_name.trim(),
     contact_name: payload.contact_name?.trim() || null,
@@ -1220,11 +1314,11 @@ export async function createVultoProspect(payload: {
     instagram: payload.instagram?.trim() || null,
     city: payload.city?.trim() || null,
     state: payload.state?.trim() || null,
-    source: payload.source?.trim() || null,
+    source: validSource,
     channel: validChannel,
-    service_interest: payload.service_interest?.trim() || null,
-    status: payload.status || 'novo',
-    priority: payload.priority || 'media',
+    service_interest: validService,
+    status: validStatus,
+    priority: validPriority,
     last_contact_at: payload.last_contact_at || null,
     next_contact_at: payload.next_contact_at || null,
     proposal_amount: payload.proposal_amount !== undefined && payload.proposal_amount !== null ? Number(payload.proposal_amount) : null,
@@ -1266,7 +1360,31 @@ export async function updateVultoProspect(
   };
 
   if (updates.channel !== undefined) {
-    payload.channel = updates.channel ? normalizeProspectChannel(updates.channel) : 'whatsapp';
+    payload.channel = normalizeProspectChannel(updates.channel);
+  }
+
+  if (updates.priority !== undefined) {
+    const rawPriority = String(updates.priority).trim().toLowerCase();
+    if ((VALID_PROSPECT_PRIORITIES as readonly string[]).includes(rawPriority)) {
+      payload.priority = rawPriority as ProspectPriority;
+    } else {
+      return {
+        success: false,
+        error: `Prioridade inválida (${updates.priority}). Valores permitidos: frio, morno, quente.`,
+      };
+    }
+  }
+
+  if (updates.status !== undefined) {
+    payload.status = normalizeProspectStatus(updates.status);
+  }
+
+  if (updates.source !== undefined) {
+    payload.source = normalizeProspectSource(updates.source);
+  }
+
+  if (updates.service_interest !== undefined) {
+    payload.service_interest = normalizeProspectService(updates.service_interest);
   }
 
   try {
