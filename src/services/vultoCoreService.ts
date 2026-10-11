@@ -126,6 +126,29 @@ export type ProspectStatus =
 
 export type ProspectPriority = 'baixa' | 'media' | 'alta' | 'urgente';
 
+export const VALID_PROSPECT_CHANNELS = [
+  'email',
+  'whatsapp',
+  'presencial',
+  'instagram',
+  'telefone',
+  'outro',
+] as const;
+
+export type ProspectChannel = (typeof VALID_PROSPECT_CHANNELS)[number];
+
+export function normalizeProspectChannel(raw?: string | null): ProspectChannel {
+  if (!raw) return 'whatsapp';
+  const clean = raw.trim().toLowerCase();
+  if (clean === 'whatsapp') return 'whatsapp';
+  if (clean === 'email' || clean === 'e-mail') return 'email';
+  if (clean === 'instagram') return 'instagram';
+  if (clean === 'telefone') return 'telefone';
+  if (clean === 'presencial') return 'presencial';
+  if (clean === 'outro') return 'outro';
+  return 'whatsapp';
+}
+
 export interface VultoProspect {
   id: string;
   company_name: string;
@@ -1187,6 +1210,7 @@ export async function createVultoProspect(payload: {
   notes?: string | null;
 }): Promise<{ data: VultoProspect | null; error: string | null }> {
   const op = getActiveOperatorSession();
+  const validChannel = payload.channel ? normalizeProspectChannel(payload.channel) : 'whatsapp';
   const insertPayload = {
     company_name: payload.company_name.trim(),
     contact_name: payload.contact_name?.trim() || null,
@@ -1197,7 +1221,7 @@ export async function createVultoProspect(payload: {
     city: payload.city?.trim() || null,
     state: payload.state?.trim() || null,
     source: payload.source?.trim() || null,
-    channel: payload.channel?.trim() || null,
+    channel: validChannel,
     service_interest: payload.service_interest?.trim() || null,
     status: payload.status || 'novo',
     priority: payload.priority || 'media',
@@ -1240,6 +1264,10 @@ export async function updateVultoProspect(
     updated_at: new Date().toISOString(),
     operator_id: op?.id || null,
   };
+
+  if (updates.channel !== undefined) {
+    payload.channel = updates.channel ? normalizeProspectChannel(updates.channel) : 'whatsapp';
+  }
 
   try {
     const { error } = await supabase

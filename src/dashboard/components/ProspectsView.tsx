@@ -41,6 +41,9 @@ import {
   InteractionType,
   VultoClientServiceType,
   VultoOperator,
+  VALID_PROSPECT_CHANNELS,
+  ProspectChannel,
+  normalizeProspectChannel,
   fetchVultoProspects,
   createVultoProspect,
   updateVultoProspect,
@@ -131,14 +134,20 @@ export const INTERACTION_TYPE_CONFIG: Record<
   outro: { label: 'Outro', icon: CalendarClock, color: 'text-white/60' },
 };
 
-export const CHANNEL_OPTIONS = [
-  'WhatsApp',
-  'E-mail',
-  'Instagram',
-  'Telefone',
-  'Presencial',
-  'Outro',
-] as const;
+export const CHANNEL_OPTIONS: { value: ProspectChannel; label: string }[] = [
+  { value: 'whatsapp', label: 'WhatsApp' },
+  { value: 'email', label: 'E-mail' },
+  { value: 'instagram', label: 'Instagram' },
+  { value: 'telefone', label: 'Telefone' },
+  { value: 'presencial', label: 'Presencial' },
+  { value: 'outro', label: 'Outro' },
+];
+
+export function getChannelLabel(raw?: string | null): string {
+  const norm = normalizeProspectChannel(raw);
+  const found = CHANNEL_OPTIONS.find((c) => c.value === norm);
+  return found?.label || 'WhatsApp';
+}
 
 export const SERVICE_CONVERT_OPTIONS: { value: VultoClientServiceType; label: string }[] = [
   { value: 'trafego_pago', label: 'Tráfego Pago' },
@@ -249,7 +258,7 @@ export function ProspectsView() {
 
   // Form State Simplificado (Cadastro em 10 segundos)
   const [companyName, setCompanyName] = useState('');
-  const [channel, setChannel] = useState<string>('WhatsApp');
+  const [channel, setChannel] = useState<ProspectChannel>('whatsapp');
   const [contactReference, setContactReference] = useState('');
   const [status, setStatus] = useState<ProspectStatus>('em_contato');
   const [nextContactAt, setNextContactAt] = useState('');
@@ -539,7 +548,7 @@ export function ProspectsView() {
   const handleOpenCreateModal = () => {
     setEditingProspect(null);
     setCompanyName('');
-    setChannel('WhatsApp');
+    setChannel('whatsapp');
     setContactReference('');
     setStatus('em_contato'); // Padrão: Primeiro Contato
     setNextContactAt('');
@@ -567,7 +576,7 @@ export function ProspectsView() {
     if (e) e.stopPropagation();
     setEditingProspect(p);
     setCompanyName(p.company_name);
-    setChannel(p.channel || 'WhatsApp');
+    setChannel(normalizeProspectChannel(p.channel));
     setContactReference(p.contact_name || p.phone || p.email || p.instagram || '');
     setStatus(p.status);
     setNextContactAt(p.next_contact_at ? p.next_contact_at.slice(0, 16) : '');
@@ -623,9 +632,30 @@ export function ProspectsView() {
       }
     }
 
+    // Validação estrita do canal antes do INSERT / UPDATE
+    const validChannels = [
+      'email',
+      'whatsapp',
+      'presencial',
+      'instagram',
+      'telefone',
+      'outro',
+    ];
+
+    const finalChannel = normalizeProspectChannel(channel);
+
+    if (!validChannels.includes(finalChannel)) {
+      setFormError('Canal de contato inválido. Selecione um meio de contato válido.');
+      showToast('Canal de contato inválido.', 'error');
+      setIsSubmitting(false);
+      return;
+    }
+
+    console.log('CHANNEL ENVIADO AO SUPABASE:', finalChannel);
+
     const payload: Partial<VultoProspect> = {
       company_name: companyName.trim(),
-      channel: channel || 'WhatsApp',
+      channel: finalChannel,
       contact_name: finalContactName,
       email: finalEmail,
       phone: finalPhone,
@@ -1123,7 +1153,7 @@ export function ProspectsView() {
                               {p.company_name}
                             </h3>
                             <span className="text-[9px] font-mono px-1.5 py-0.5 border border-white/10 bg-white/5 text-white/70 shrink-0">
-                              {p.channel || 'Contato'}
+                              {getChannelLabel(p.channel)}
                             </span>
                           </div>
 
@@ -1275,7 +1305,7 @@ export function ProspectsView() {
 
                     <td className="p-3 text-white/70">
                       <span className="px-2 py-0.5 border border-white/10 bg-white/5 text-[10px]">
-                        {p.channel || 'WhatsApp'}
+                        {getChannelLabel(p.channel)}
                       </span>
                     </td>
 
@@ -1445,7 +1475,7 @@ export function ProspectsView() {
                 <div className="flex items-center justify-between">
                   <div className="text-[10px] text-white/40 tracking-wider">DADOS E FOLLOW-UP</div>
                   <span className="px-2 py-0.5 bg-white/5 border border-white/10 text-white/60 text-[10px]">
-                    Canal: {selectedProspect.channel || 'WhatsApp'}
+                    Canal: {getChannelLabel(selectedProspect.channel)}
                   </span>
                 </div>
 
@@ -1767,20 +1797,20 @@ export function ProspectsView() {
                   2. MEIO DE CONTATO *
                 </label>
                 <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5">
-                  {CHANNEL_OPTIONS.map((ch) => {
-                    const isSelected = channel === ch;
+                  {CHANNEL_OPTIONS.map((opt) => {
+                    const isSelected = channel === opt.value;
                     return (
                       <button
                         type="button"
-                        key={ch}
-                        onClick={() => setChannel(ch)}
+                        key={opt.value}
+                        onClick={() => setChannel(opt.value)}
                         className={`py-2 px-1 text-center text-xs font-bold border transition-colors cursor-pointer ${
                           isSelected
                             ? 'bg-[#C6FF00] text-[#0A0A0A] border-[#C6FF00]'
                             : 'bg-[#161616] text-white/70 border-white/10 hover:text-white hover:border-white/20'
                         }`}
                       >
-                        {ch}
+                        {opt.label}
                       </button>
                     );
                   })}
