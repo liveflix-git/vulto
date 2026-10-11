@@ -100,12 +100,18 @@ function AppContent() {
       document.title = 'Estrutura & Serviços | Vulto Lab';
     } else if (normalizedPath === '/dashboard/login') {
       document.title = 'Command Center — Login | Vulto Lab';
+    } else if (normalizedPath === '/dashboard/prospeccao') {
+      document.title = 'Prospecção & Mini CRM | Vulto Lab — Core OS';
+    } else if (normalizedPath === '/dashboard/metas-prospeccao' || normalizedPath === '/dashboard/metas') {
+      document.title = 'Metas de Prospecção | Vulto Lab — Core OS';
     } else if (normalizedPath === '/dashboard/clientes') {
       document.title = 'Carteira de Clientes & MRR | Vulto Lab — Core OS';
     } else if (normalizedPath === '/dashboard/financeiro' || normalizedPath === '/dashboard/crm') {
       document.title = 'Gestão Financeira & Comercial | Vulto Lab — Core OS';
     } else if (normalizedPath === '/dashboard/vulto-tap') {
       document.title = 'VULTO TAP & Estoque NFC | Vulto Lab — Core OS';
+    } else if (normalizedPath === '/dashboard/notas' || normalizedPath === '/dashboard/minhas-notas') {
+      document.title = 'Minhas Notas | Vulto Lab — Core OS';
     } else if (normalizedPath === '/dashboard/projetos') {
       document.title = 'Projetos & Demandas | Vulto Lab — Core OS';
     } else if (normalizedPath.startsWith('/dashboard')) {

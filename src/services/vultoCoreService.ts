@@ -112,6 +112,95 @@ export interface VultoAuditLogItem {
   created_at: string;
 }
 
+// =====================================================================
+// TIPOS PROSPECÇÃO / MINI CRM
+// =====================================================================
+
+export type ProspectStatus =
+  | 'novo'
+  | 'em_contato'
+  | 'reuniao_agendada'
+  | 'proposta_enviada'
+  | 'fechado'
+  | 'perdido';
+
+export type ProspectPriority = 'baixa' | 'media' | 'alta' | 'urgente';
+
+export interface VultoProspect {
+  id: string;
+  company_name: string;
+  contact_name: string | null;
+  email: string | null;
+  phone: string | null;
+  website: string | null;
+  instagram: string | null;
+  city: string | null;
+  state: string | null;
+  source: string | null;
+  channel: string | null;
+  service_interest: string | null;
+  status: ProspectStatus;
+  priority: ProspectPriority;
+  last_contact_at: string | null;
+  next_contact_at: string | null;
+  proposal_amount: number | null;
+  loss_reason: string | null;
+  notes: string | null;
+  converted_client_id: string | null;
+  operator_id: string | null;
+  operator_name?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export type InteractionType =
+  | 'whatsapp'
+  | 'email'
+  | 'ligacao'
+  | 'reuniao'
+  | 'direct_instagram'
+  | 'outro';
+
+export interface VultoProspectInteraction {
+  id: string;
+  prospect_id: string;
+  type: InteractionType;
+  summary: string;
+  details: string | null;
+  interaction_at: string;
+  operator_id: string | null;
+  operator_name?: string;
+  created_at: string;
+}
+
+export type ProspectingGoalScope = 'team' | 'operator';
+
+export interface VultoProspectingGoal {
+  id: string;
+  month: string;
+  scope: ProspectingGoalScope;
+  target_operator_id: string | null;
+  prospects_target: number;
+  initial_contacts_target: number;
+  followups_target: number;
+  responses_target: number;
+  proposals_target: number;
+  closed_target: number;
+  updated_by_operator_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface VultoOperatorNote {
+  id: string;
+  operator_id: string;
+  slot: number; // 1, 2, 3, 4
+  title: string;
+  content: string;
+  created_at: string;
+  updated_at: string;
+}
+
 // Fallbacks locais e padrão de operadores
 export const DEFAULT_OPERATORS: VultoOperator[] = [
   { id: 'felipe', name: 'Felipe', active: true, created_at: new Date().toISOString() },
@@ -1057,6 +1146,706 @@ export async function deleteVultoPriceItem(id: string): Promise<{ success: boole
 }
 
 // =====================================================================
+// PROSPECÇÃO / MINI CRM - CRUD & PIPELINE
+// =====================================================================
+
+export async function fetchVultoProspects(): Promise<{ data: VultoProspect[]; error: string | null }> {
+  try {
+    const { data, error } = await supabase
+      .from('vulto_prospects')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.warn('Erro ao carregar prospects do Supabase:', error);
+      return { data: [], error: error.message };
+    }
+    return { data: (data || []) as VultoProspect[], error: null };
+  } catch (e: any) {
+    console.error('Erro ao buscar prospects:', e);
+    return { data: [], error: e.message || 'Erro inesperado ao buscar prospects' };
+  }
+}
+
+export async function createVultoProspect(payload: {
+  company_name: string;
+  contact_name?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  website?: string | null;
+  instagram?: string | null;
+  city?: string | null;
+  state?: string | null;
+  source?: string | null;
+  channel?: string | null;
+  service_interest?: string | null;
+  status?: ProspectStatus;
+  priority?: ProspectPriority;
+  last_contact_at?: string | null;
+  next_contact_at?: string | null;
+  proposal_amount?: number | null;
+  notes?: string | null;
+}): Promise<{ data: VultoProspect | null; error: string | null }> {
+  const op = getActiveOperatorSession();
+  const insertPayload = {
+    company_name: payload.company_name.trim(),
+    contact_name: payload.contact_name?.trim() || null,
+    email: payload.email?.trim() || null,
+    phone: payload.phone?.trim() || null,
+    website: payload.website?.trim() || null,
+    instagram: payload.instagram?.trim() || null,
+    city: payload.city?.trim() || null,
+    state: payload.state?.trim() || null,
+    source: payload.source?.trim() || null,
+    channel: payload.channel?.trim() || null,
+    service_interest: payload.service_interest?.trim() || null,
+    status: payload.status || 'novo',
+    priority: payload.priority || 'media',
+    last_contact_at: payload.last_contact_at || null,
+    next_contact_at: payload.next_contact_at || null,
+    proposal_amount: payload.proposal_amount !== undefined && payload.proposal_amount !== null ? Number(payload.proposal_amount) : null,
+    notes: payload.notes?.trim() || null,
+    operator_id: op?.id || null,
+  };
+
+  try {
+    const { data, error } = await supabase
+      .from('vulto_prospects')
+      .insert([insertPayload])
+      .select()
+      .single();
+
+    if (error) return { data: null, error: error.message };
+
+    await logVultoAudit({
+      action: 'Adicionou Prospect',
+      entity_type: 'vulto_prospects',
+      entity_id: data.id,
+      details: `${op?.name || 'Operador'} cadastrou o prospect ${payload.company_name}`,
+    });
+
+    return { data: data as VultoProspect, error: null };
+  } catch (e: any) {
+    return { data: null, error: e.message || 'Erro ao cadastrar prospect' };
+  }
+}
+
+export async function updateVultoProspect(
+  id: string,
+  updates: Partial<Omit<VultoProspect, 'id' | 'created_at'>>
+): Promise<{ success: boolean; error: string | null }> {
+  const op = getActiveOperatorSession();
+  const payload: any = {
+    ...updates,
+    updated_at: new Date().toISOString(),
+    operator_id: op?.id || null,
+  };
+
+  try {
+    const { error } = await supabase
+      .from('vulto_prospects')
+      .update(payload)
+      .eq('id', id);
+
+    if (error) return { success: false, error: error.message };
+
+    await logVultoAudit({
+      action: 'Atualizou Prospect',
+      entity_type: 'vulto_prospects',
+      entity_id: id,
+      details: `${op?.name || 'Operador'} atualizou o prospect #${id.slice(0, 8)}`,
+    });
+
+    return { success: true, error: null };
+  } catch (e: any) {
+    return { success: false, error: e.message || 'Erro ao atualizar prospect' };
+  }
+}
+
+export async function deleteVultoProspect(id: string): Promise<{ success: boolean; error: string | null }> {
+  const op = getActiveOperatorSession();
+  try {
+    // Excluir interações associadas primeiro
+    await supabase.from('vulto_prospect_interactions').delete().eq('prospect_id', id);
+
+    const { error } = await supabase
+      .from('vulto_prospects')
+      .delete()
+      .eq('id', id);
+
+    if (error) return { success: false, error: error.message };
+
+    await logVultoAudit({
+      action: 'Excluiu Prospect',
+      entity_type: 'vulto_prospects',
+      entity_id: id,
+      details: `${op?.name || 'Operador'} excluiu o prospect #${id.slice(0, 8)}`,
+    });
+
+    return { success: true, error: null };
+  } catch (e: any) {
+    return { success: false, error: e.message || 'Erro ao excluir prospect' };
+  }
+}
+
+export async function convertProspectToClient(
+  prospect: VultoProspect,
+  serviceType: VultoClientServiceType
+): Promise<{ client: VultoClientItem | null; error: string | null }> {
+  const op = getActiveOperatorSession();
+  try {
+    // 1. Criar cliente na tabela vulto_clients
+    const clientPayload = {
+      name: prospect.company_name.trim(),
+      service_type: serviceType,
+      operator_id: op?.id || null,
+    };
+
+    const { data: clientData, error: clientError } = await supabase
+      .from('vulto_clients')
+      .insert([clientPayload])
+      .select()
+      .single();
+
+    if (clientError) {
+      return { client: null, error: `Erro ao criar cliente: ${clientError.message}` };
+    }
+
+    // 2. Atualizar prospect para status 'fechado' e gravar converted_client_id
+    const { error: prospectError } = await supabase
+      .from('vulto_prospects')
+      .update({
+        status: 'fechado',
+        converted_client_id: clientData.id,
+        updated_at: new Date().toISOString(),
+        operator_id: op?.id || null,
+      })
+      .eq('id', prospect.id);
+
+    if (prospectError) {
+      console.warn('Cliente criado mas erro ao atualizar prospect:', prospectError);
+    }
+
+    // 3. Registrar auditoria de conversão
+    await logVultoAudit({
+      action: 'Converteu Prospect em Cliente',
+      entity_type: 'vulto_prospects',
+      entity_id: prospect.id,
+      details: `${op?.name || 'Operador'} converteu "${prospect.company_name}" em cliente oficial (${serviceType})`,
+    });
+
+    return { client: clientData as VultoClientItem, error: null };
+  } catch (e: any) {
+    return { client: null, error: e.message || 'Erro ao converter prospect em cliente' };
+  }
+}
+
+// =====================================================================
+// INTERAÇÕES DE PROSPECÇÃO (TIMELINE)
+// =====================================================================
+
+export async function fetchProspectInteractions(
+  prospectId: string
+): Promise<{ data: VultoProspectInteraction[]; error: string | null }> {
+  try {
+    const { data, error } = await supabase
+      .from('vulto_prospect_interactions')
+      .select('*')
+      .eq('prospect_id', prospectId)
+      .order('interaction_at', { ascending: false });
+
+    if (error) {
+      console.warn('Erro ao carregar interações do Supabase:', error);
+      return { data: [], error: error.message };
+    }
+    return { data: (data || []) as VultoProspectInteraction[], error: null };
+  } catch (e: any) {
+    console.error('Erro ao buscar interações:', e);
+    return { data: [], error: e.message || 'Erro inesperado ao buscar interações' };
+  }
+}
+
+export async function createProspectInteraction(payload: {
+  prospect_id: string;
+  type: InteractionType;
+  summary: string;
+  details?: string | null;
+  interaction_at?: string;
+}): Promise<{ data: VultoProspectInteraction | null; error: string | null }> {
+  const op = getActiveOperatorSession();
+  const interactionTime = payload.interaction_at || new Date().toISOString();
+
+  const insertPayload = {
+    prospect_id: payload.prospect_id,
+    type: payload.type,
+    summary: payload.summary.trim(),
+    details: payload.details?.trim() || null,
+    interaction_at: interactionTime,
+    operator_id: op?.id || null,
+  };
+
+  try {
+    const { data, error } = await supabase
+      .from('vulto_prospect_interactions')
+      .insert([insertPayload])
+      .select()
+      .single();
+
+    if (error) return { data: null, error: error.message };
+
+    // Atualizar automaticamente last_contact_at no prospect
+    await supabase
+      .from('vulto_prospects')
+      .update({
+        last_contact_at: interactionTime,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', payload.prospect_id);
+
+    await logVultoAudit({
+      action: 'Registrou Interação',
+      entity_type: 'vulto_prospect_interactions',
+      entity_id: data.id,
+      details: `${op?.name || 'Operador'} registrou interação (${payload.type}) no prospect #${payload.prospect_id.slice(0, 8)}: ${payload.summary}`,
+    });
+
+    return { data: data as VultoProspectInteraction, error: null };
+  } catch (e: any) {
+    return { data: null, error: e.message || 'Erro ao registrar interação' };
+  }
+}
+
+export async function deleteProspectInteraction(
+  id: string
+): Promise<{ success: boolean; error: string | null }> {
+  const op = getActiveOperatorSession();
+  try {
+    const { error } = await supabase
+      .from('vulto_prospect_interactions')
+      .delete()
+      .eq('id', id);
+
+    if (error) return { success: false, error: error.message };
+
+    await logVultoAudit({
+      action: 'Excluiu Interação',
+      entity_type: 'vulto_prospect_interactions',
+      entity_id: id,
+      details: `${op?.name || 'Operador'} excluiu interação #${id.slice(0, 8)}`,
+    });
+
+    return { success: true, error: null };
+  } catch (e: any) {
+    return { success: false, error: e.message || 'Erro ao excluir interação' };
+  }
+}
+
+// =====================================================================
+// METAS DE PROSPECÇÃO (vulto_prospecting_goals)
+// =====================================================================
+
+export async function fetchProspectingGoal(
+  month: string,
+  scope: ProspectingGoalScope = 'team',
+  targetOperatorId: string | null = null
+): Promise<{ data: VultoProspectingGoal | null; error: string | null }> {
+  try {
+    const monthPrefix = month.slice(0, 7); // 'YYYY-MM'
+
+    let query = supabase
+      .from('vulto_prospecting_goals')
+      .select('*')
+      .eq('scope', scope);
+
+    if (scope === 'operator' && targetOperatorId) {
+      query = query.eq('target_operator_id', targetOperatorId);
+    } else {
+      query = query.or('target_operator_id.is.null,target_operator_id.eq.');
+    }
+
+    const { data, error } = await query;
+    if (error) {
+      console.warn('Erro ao carregar metas de prospecção do Supabase:', error);
+      return { data: null, error: error.message };
+    }
+
+    if (data && data.length > 0) {
+      const matched = data.find((row: any) => {
+        if (!row.month) return false;
+        return row.month === month || row.month.startsWith(monthPrefix);
+      });
+      if (matched) return { data: matched as VultoProspectingGoal, error: null };
+    }
+
+    return { data: null, error: null };
+  } catch (e: any) {
+    console.error('Erro ao buscar meta de prospecção:', e);
+    return { data: null, error: e.message || 'Erro inesperado ao buscar metas de prospecção' };
+  }
+}
+
+export async function upsertProspectingGoal(payload: {
+  id?: string | null;
+  month: string;
+  scope: ProspectingGoalScope;
+  target_operator_id?: string | null;
+  prospects_target: number;
+  initial_contacts_target: number;
+  followups_target: number;
+  responses_target: number;
+  proposals_target: number;
+  closed_target: number;
+}): Promise<{ data: VultoProspectingGoal | null; error: string | null }> {
+  const op = getActiveOperatorSession();
+  const monthKey = payload.month.length === 7 ? payload.month : payload.month.slice(0, 7);
+
+  const savePayload: any = {
+    month: monthKey,
+    scope: payload.scope,
+    target_operator_id: payload.scope === 'operator' ? payload.target_operator_id || null : null,
+    prospects_target: Math.max(0, Math.round(Number(payload.prospects_target) || 0)),
+    initial_contacts_target: Math.max(0, Math.round(Number(payload.initial_contacts_target) || 0)),
+    followups_target: Math.max(0, Math.round(Number(payload.followups_target) || 0)),
+    responses_target: Math.max(0, Math.round(Number(payload.responses_target) || 0)),
+    proposals_target: Math.max(0, Math.round(Number(payload.proposals_target) || 0)),
+    closed_target: Math.max(0, Math.round(Number(payload.closed_target) || 0)),
+    updated_by_operator_id: op?.id || null,
+    updated_at: new Date().toISOString(),
+  };
+
+  try {
+    let existingId = payload.id;
+
+    if (!existingId) {
+      let checkQuery = supabase
+        .from('vulto_prospecting_goals')
+        .select('id, month')
+        .eq('scope', savePayload.scope);
+
+      if (savePayload.scope === 'operator' && savePayload.target_operator_id) {
+        checkQuery = checkQuery.eq('target_operator_id', savePayload.target_operator_id);
+      } else {
+        checkQuery = checkQuery.or('target_operator_id.is.null,target_operator_id.eq.');
+      }
+
+      const { data: rows } = await checkQuery;
+      if (rows && rows.length > 0) {
+        const found = rows.find((r: any) => r.month === monthKey || r.month?.startsWith(monthKey));
+        if (found) existingId = found.id;
+      }
+    }
+
+    let resultRecord: VultoProspectingGoal | null = null;
+
+    if (existingId) {
+      const { data, error } = await supabase
+        .from('vulto_prospecting_goals')
+        .update(savePayload)
+        .eq('id', existingId)
+        .select()
+        .single();
+
+      if (error) return { data: null, error: error.message };
+      resultRecord = data as VultoProspectingGoal;
+    } else {
+      const { data, error } = await supabase
+        .from('vulto_prospecting_goals')
+        .insert([savePayload])
+        .select()
+        .single();
+
+      if (error) {
+        // Fallback tentar com month formato YYYY-MM-01 se for coluna do tipo date no postgres
+        const fallbackPayload = { ...savePayload, month: `${monthKey}-01` };
+        const fallbackRes = await supabase
+          .from('vulto_prospecting_goals')
+          .insert([fallbackPayload])
+          .select()
+          .single();
+        if (fallbackRes.error) return { data: null, error: fallbackRes.error.message };
+        resultRecord = fallbackRes.data as VultoProspectingGoal;
+      } else {
+        resultRecord = data as VultoProspectingGoal;
+      }
+    }
+
+    await logVultoAudit({
+      action: 'Definiu Metas de Prospecção',
+      entity_type: 'vulto_prospecting_goals',
+      entity_id: resultRecord?.id || null,
+      details: `${op?.name || 'Operador'} atualizou as metas de prospecção para o mês ${monthKey} (Escopo: ${payload.scope === 'team' ? 'Equipe Geral' : 'Individual'})`,
+    });
+
+    return { data: resultRecord, error: null };
+  } catch (e: any) {
+    console.error('Erro ao salvar meta de prospecção:', e);
+    return { data: null, error: e.message || 'Erro inesperado ao salvar metas' };
+  }
+}
+
+export async function fetchAllProspectsAndInteractions(): Promise<{
+  prospects: VultoProspect[];
+  interactions: VultoProspectInteraction[];
+  error: string | null;
+}> {
+  try {
+    const [pRes, iRes] = await Promise.all([
+      supabase.from('vulto_prospects').select('*').order('created_at', { ascending: false }),
+      supabase.from('vulto_prospect_interactions').select('*').order('interaction_at', { ascending: false }),
+    ]);
+
+    return {
+      prospects: (pRes.data || []) as VultoProspect[],
+      interactions: (iRes.data || []) as VultoProspectInteraction[],
+      error: pRes.error?.message || iRes.error?.message || null,
+    };
+  } catch (e: any) {
+    return { prospects: [], interactions: [], error: e.message || 'Erro ao carregar dados do CRM' };
+  }
+}
+
+// =====================================================================
+// MINHAS NOTAS DO OPERADOR (vulto_operator_notes)
+// 4 slots fixos por operador: operator_id + slot únicos
+// =====================================================================
+
+const LOCAL_NOTES_PREFIX = 'vulto_operator_notes_';
+
+function getLocalNotes(operatorKey: string): VultoOperatorNote[] {
+  try {
+    const raw = localStorage.getItem(`${LOCAL_NOTES_PREFIX}${operatorKey}`);
+    if (raw) return JSON.parse(raw);
+  } catch (e) {
+    console.warn('Erro ao ler notas locais:', e);
+  }
+  return [];
+}
+
+function setLocalNotes(operatorKey: string, notes: VultoOperatorNote[]) {
+  try {
+    localStorage.setItem(`${LOCAL_NOTES_PREFIX}${operatorKey}`, JSON.stringify(notes));
+  } catch (e) {
+    console.warn('Erro ao salvar notas locais:', e);
+  }
+}
+
+export async function fetchOperatorNotes(
+  operatorIdentifier: string
+): Promise<{ data: VultoOperatorNote[]; error: string | null }> {
+  if (!operatorIdentifier) {
+    return { data: [], error: 'Operador não identificado' };
+  }
+
+  const normalizedKey = operatorIdentifier.trim();
+
+  if (isSupabaseConfigured) {
+    try {
+      // Busca exata pelo operator_id configurado (ex: "Felipe" ou "Pietro" ou ID)
+      const { data, error } = await supabase
+        .from('vulto_operator_notes')
+        .select('*')
+        .eq('operator_id', normalizedKey)
+        .order('slot', { ascending: true });
+
+      if (error) {
+        console.warn('Aviso ao consultar vulto_operator_notes:', error.message);
+        // Fallback local se o banco falhar
+        const fallback = getLocalNotes(normalizedKey);
+        return { data: fallback, error: error.message };
+      }
+
+      if (data) {
+        const typedData = data as VultoOperatorNote[];
+        // Atualiza cache local
+        setLocalNotes(normalizedKey, typedData);
+        return { data: typedData, error: null };
+      }
+    } catch (err: any) {
+      console.warn('Erro ao conectar ao Supabase para notas:', err);
+      const fallback = getLocalNotes(normalizedKey);
+      return { data: fallback, error: err.message || 'Erro de conexão' };
+    }
+  }
+
+  // Ambiente offline / sem Supabase configurado
+  const localNotes = getLocalNotes(normalizedKey);
+  return { data: localNotes, error: null };
+}
+
+export async function saveOperatorNote(params: {
+  operator_id: string;
+  slot: number;
+  title: string;
+  content: string;
+  id?: string;
+}): Promise<{ success: boolean; data?: VultoOperatorNote; error: string | null }> {
+  const operatorKey = params.operator_id?.trim();
+  if (!operatorKey) {
+    return { success: false, error: 'Identificador do operador é obrigatório.' };
+  }
+
+  if (params.slot < 1 || params.slot > 4) {
+    return { success: false, error: 'Slot inválido. Deve ser entre 1 e 4.' };
+  }
+
+  const cleanTitle = (params.title || '').trim().slice(0, 80);
+  const cleanContent = (params.content || '').slice(0, 1000);
+  const now = new Date().toISOString();
+
+  if (isSupabaseConfigured) {
+    try {
+      let savedNote: VultoOperatorNote | null = null;
+
+      // 1. Se tem id direto, tenta update
+      if (params.id) {
+        const { data, error } = await supabase
+          .from('vulto_operator_notes')
+          .update({
+            title: cleanTitle,
+            content: cleanContent,
+            updated_at: now,
+          })
+          .eq('id', params.id)
+          .select()
+          .single();
+
+        if (!error && data) {
+          savedNote = data as VultoOperatorNote;
+        }
+      }
+
+      // 2. Se não tinha id ou o update não encontrou, busca se já existe registro com operator_id e slot
+      if (!savedNote) {
+        const { data: existing } = await supabase
+          .from('vulto_operator_notes')
+          .select('id')
+          .eq('operator_id', operatorKey)
+          .eq('slot', params.slot)
+          .maybeSingle();
+
+        if (existing?.id) {
+          const { data: updated, error: updateErr } = await supabase
+            .from('vulto_operator_notes')
+            .update({
+              title: cleanTitle,
+              content: cleanContent,
+              updated_at: now,
+            })
+            .eq('id', existing.id)
+            .select()
+            .single();
+
+          if (updateErr) throw updateErr;
+          savedNote = updated as VultoOperatorNote;
+        } else {
+          // Inserção de novo registro
+          const { data: inserted, error: insertErr } = await supabase
+            .from('vulto_operator_notes')
+            .insert({
+              operator_id: operatorKey,
+              slot: params.slot,
+              title: cleanTitle,
+              content: cleanContent,
+              created_at: now,
+              updated_at: now,
+            })
+            .select()
+            .single();
+
+          if (insertErr) throw insertErr;
+          savedNote = inserted as VultoOperatorNote;
+        }
+      }
+
+      if (savedNote) {
+        // Atualiza cache local
+        const currentLocal = getLocalNotes(operatorKey);
+        const filtered = currentLocal.filter((n) => n.slot !== params.slot);
+        filtered.push(savedNote);
+        setLocalNotes(operatorKey, filtered);
+
+        await logVultoAudit({
+          action: 'Atualizou Nota',
+          entity_type: 'operator_notes',
+          entity_id: savedNote.id,
+          operator_id: operatorKey,
+          details: `${operatorKey} salvou nota no Slot ${params.slot}: "${cleanTitle || '(Sem título)'}"`,
+        });
+
+        return { success: true, data: savedNote, error: null };
+      }
+    } catch (e: any) {
+      console.warn('Erro ao salvar no Supabase, aplicando persistência local:', e);
+    }
+  }
+
+  // Fallback local se Supabase offline
+  const currentLocal = getLocalNotes(operatorKey);
+  const existingIdx = currentLocal.findIndex((n) => n.slot === params.slot);
+  const localNote: VultoOperatorNote = {
+    id: params.id || (existingIdx >= 0 ? currentLocal[existingIdx].id : `local-note-${Date.now()}`),
+    operator_id: operatorKey,
+    slot: params.slot,
+    title: cleanTitle,
+    content: cleanContent,
+    created_at: existingIdx >= 0 ? currentLocal[existingIdx].created_at : now,
+    updated_at: now,
+  };
+
+  if (existingIdx >= 0) {
+    currentLocal[existingIdx] = localNote;
+  } else {
+    currentLocal.push(localNote);
+  }
+  setLocalNotes(operatorKey, currentLocal);
+
+  return { success: true, data: localNote, error: null };
+}
+
+export async function deleteOperatorNote(params: {
+  operator_id: string;
+  slot: number;
+  id?: string;
+}): Promise<{ success: boolean; error: string | null }> {
+  const operatorKey = params.operator_id?.trim();
+  if (!operatorKey) {
+    return { success: false, error: 'Identificador do operador é obrigatório.' };
+  }
+
+  if (isSupabaseConfigured) {
+    try {
+      let query = supabase.from('vulto_operator_notes').delete();
+      if (params.id) {
+        query = query.eq('id', params.id);
+      } else {
+        query = query.eq('operator_id', operatorKey).eq('slot', params.slot);
+      }
+      const { error } = await query;
+      if (error) {
+        console.warn('Erro ao deletar no Supabase:', error.message);
+      }
+    } catch (e: any) {
+      console.warn('Falha na requisição de exclusão ao Supabase:', e);
+    }
+  }
+
+  // Atualizar cache local
+  const currentLocal = getLocalNotes(operatorKey);
+  const filtered = currentLocal.filter((n) => n.slot !== params.slot);
+  setLocalNotes(operatorKey, filtered);
+
+  await logVultoAudit({
+    action: 'Limpou Slot de Nota',
+    entity_type: 'operator_notes',
+    entity_id: params.id || null,
+    operator_id: operatorKey,
+    details: `${operatorKey} limpou o Slot ${params.slot} de suas notas pessoais.`,
+  });
+
+  return { success: true, error: null };
+}
+
+// =====================================================================
 // FORMATAÇÃO DE DADOS OPERACIONAIS (ZONA DE PERIGO)
 // =====================================================================
 
@@ -1072,6 +1861,8 @@ export async function formatOperationalData(): Promise<{ success: boolean; error
       supabase.from('vulto_inventory').delete().neq('id', '00000000-0000-0000-0000-000000000000'),
       supabase.from('vulto_monthly_goals').delete().neq('id', '00000000-0000-0000-0000-000000000000'),
       supabase.from('vulto_price_table').delete().neq('id', '00000000-0000-0000-0000-000000000000'),
+      supabase.from('vulto_prospect_interactions').delete().neq('id', '00000000-0000-0000-0000-000000000000'),
+      supabase.from('vulto_prospects').delete().neq('id', '00000000-0000-0000-0000-000000000000'),
       supabase.from('vulto_audit_logs').delete().neq('id', '00000000-0000-0000-0000-000000000000'),
     ]);
 

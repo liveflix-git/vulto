@@ -3,9 +3,12 @@ import {
   LayoutDashboard,
   DollarSign,
   Users,
+  UserPlus,
   FolderGit2,
   Package,
   FileBarChart,
+  Target,
+  StickyNote,
   LogOut,
   X,
 } from 'lucide-react';
@@ -13,9 +16,12 @@ import {
 export type VultoTab =
   | 'overview'
   | 'finance'
+  | 'prospects'
+  | 'prospecting_goals'
   | 'clients'
   | 'projects_services'
   | 'inventory_nfc'
+  | 'operator_notes'
   | 'reports';
 
 interface DashboardSidebarProps {
@@ -28,9 +34,12 @@ interface DashboardSidebarProps {
 const NAV_ITEMS: { id: VultoTab; label: string; icon: React.ElementType }[] = [
   { id: 'overview', label: 'VISÃO GERAL', icon: LayoutDashboard },
   { id: 'finance', label: 'FINANCEIRO', icon: DollarSign },
+  { id: 'prospects', label: 'PROSPECÇÃO', icon: UserPlus },
+  { id: 'prospecting_goals', label: 'METAS DE PROSPECÇÃO', icon: Target },
   { id: 'clients', label: 'CLIENTES', icon: Users },
   { id: 'projects_services', label: 'PROJETOS & SERVIÇOS', icon: FolderGit2 },
   { id: 'inventory_nfc', label: 'ESTOQUE NFC', icon: Package },
+  { id: 'operator_notes', label: 'MINHAS NOTAS', icon: StickyNote },
   { id: 'reports', label: 'RELATÓRIOS', icon: FileBarChart },
 ];
 

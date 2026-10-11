@@ -16,7 +16,10 @@ import { OverviewView } from './components/OverviewView';
 import { FinanceView } from './components/FinanceView';
 import { ClientsView } from './components/ClientsView';
 import { ProjectsServicesView } from './components/ProjectsServicesView';
+import { ProspectsView } from './components/ProspectsView';
+import { ProspectingGoalsView } from './components/ProspectingGoalsView';
 import { InventoryNfcView } from './components/InventoryNfcView';
+import { OperatorNotesView } from './components/OperatorNotesView';
 import { ReportsView } from './components/ReportsView';
 import { Menu } from 'lucide-react';
 
@@ -48,17 +51,24 @@ export function DashboardApp({
 
   // Aba ativa da nova sidebar limpa
   const [currentTab, setCurrentTab] = useState<VultoTab>(() => {
+    if (currentPath.includes('/metas-prospeccao') || currentPath.includes('/metas')) return 'prospecting_goals';
+    if (currentPath.includes('/prospeccao') || currentPath.includes('/leads') || currentPath.includes('/funil')) return 'prospects';
     if (currentPath.includes('/financeiro') || currentPath.includes('/crm') || currentPath.includes('/pipeline')) return 'finance';
     if (currentPath.includes('/clientes')) return 'clients';
     if (currentPath.includes('/projetos') || currentPath.includes('/servicos') || currentPath.includes('/precos')) return 'projects_services';
     if (currentPath.includes('/vulto-tap') || currentPath.includes('/estoque')) return 'inventory_nfc';
+    if (currentPath.includes('/notas') || currentPath.includes('/minhas-notas')) return 'operator_notes';
     if (currentPath.includes('/relatorios')) return 'reports';
     return 'overview';
   });
 
   // Sincronizar tab se a URL mudar
   useEffect(() => {
-    if (currentPath.includes('/financeiro') || currentPath.includes('/crm') || currentPath.includes('/pipeline')) {
+    if (currentPath.includes('/metas-prospeccao') || currentPath.includes('/metas')) {
+      setCurrentTab('prospecting_goals');
+    } else if (currentPath.includes('/prospeccao') || currentPath.includes('/leads') || currentPath.includes('/funil')) {
+      setCurrentTab('prospects');
+    } else if (currentPath.includes('/financeiro') || currentPath.includes('/crm') || currentPath.includes('/pipeline')) {
       setCurrentTab('finance');
     } else if (currentPath.includes('/clientes')) {
       setCurrentTab('clients');
@@ -66,6 +76,8 @@ export function DashboardApp({
       setCurrentTab('projects_services');
     } else if (currentPath.includes('/vulto-tap') || currentPath.includes('/estoque')) {
       setCurrentTab('inventory_nfc');
+    } else if (currentPath.includes('/notas') || currentPath.includes('/minhas-notas')) {
+      setCurrentTab('operator_notes');
     } else if (currentPath.includes('/relatorios')) {
       setCurrentTab('reports');
     }
@@ -129,9 +141,12 @@ export function DashboardApp({
     if (onNavigate) {
       if (tab === 'overview') onNavigate('/dashboard');
       else if (tab === 'finance') onNavigate('/dashboard/financeiro');
+      else if (tab === 'prospects') onNavigate('/dashboard/prospeccao');
+      else if (tab === 'prospecting_goals') onNavigate('/dashboard/metas-prospeccao');
       else if (tab === 'clients') onNavigate('/dashboard/clientes');
       else if (tab === 'projects_services') onNavigate('/dashboard/projetos');
       else if (tab === 'inventory_nfc') onNavigate('/dashboard/vulto-tap');
+      else if (tab === 'operator_notes') onNavigate('/dashboard/notas');
       else if (tab === 'reports') onNavigate('/dashboard/relatorios');
     }
   };
@@ -219,9 +234,14 @@ export function DashboardApp({
               <OverviewView onNavigateTab={handleSelectTab} />
             )}
             {currentTab === 'finance' && <FinanceView />}
+            {currentTab === 'prospects' && <ProspectsView />}
+            {currentTab === 'prospecting_goals' && <ProspectingGoalsView />}
             {currentTab === 'clients' && <ClientsView />}
             {currentTab === 'projects_services' && <ProjectsServicesView />}
             {currentTab === 'inventory_nfc' && <InventoryNfcView />}
+            {currentTab === 'operator_notes' && (
+              <OperatorNotesView activeOperator={activeOperator} />
+            )}
             {currentTab === 'reports' && <ReportsView />}
           </div>
         </main>
