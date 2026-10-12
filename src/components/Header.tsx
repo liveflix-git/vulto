@@ -244,6 +244,21 @@ export const Header: React.FC<HeaderProps> = ({
           </div>
 
           <a
+            href="/investimento"
+            onClick={(e) => handleLinkClick(e, '/investimento')}
+            className={`relative py-2 text-xs font-semibold uppercase tracking-[0.16em] transition-colors whitespace-nowrap group ${
+              currentPath === '/investimento' ? 'text-[#F4F4F1]' : 'text-[#F4F4F1]/70 hover:text-[#F4F4F1]'
+            }`}
+          >
+            {dict.header.investment}
+            <span
+              className={`absolute bottom-0 left-0 h-[1.5px] bg-[#C6FF00] transition-transform duration-200 origin-left w-full ${
+                currentPath === '/investimento' ? 'scale-x-100' : 'scale-x-0 group-hover:scale-x-100'
+              }`}
+            />
+          </a>
+
+          <a
             href="/cases"
             onClick={(e) => handleLinkClick(e, '/cases')}
             className={`relative py-2 text-xs font-semibold uppercase tracking-[0.16em] transition-colors whitespace-nowrap group ${
@@ -511,6 +526,17 @@ export const Header: React.FC<HeaderProps> = ({
               </div>
 
               <a
+                href="/investimento"
+                onClick={(e) => handleLinkClick(e, '/investimento')}
+                className={`py-3.5 text-base font-display font-semibold tracking-tight flex items-center justify-between ${
+                  currentPath === '/investimento' ? 'text-[#C6FF00]' : 'text-[#F4F4F1]'
+                }`}
+              >
+                <span>{dict.header.investment}</span>
+                <span className="font-mono-tabular text-xs text-[#F4F4F1]/40">03</span>
+              </a>
+
+              <a
                 href="/cases"
                 onClick={(e) => handleLinkClick(e, '/cases')}
                 className={`py-3.5 text-base font-display font-semibold tracking-tight flex items-center justify-between ${
@@ -518,7 +544,7 @@ export const Header: React.FC<HeaderProps> = ({
                 }`}
               >
                 <span>{dict.header.cases}</span>
-                <span className="font-mono-tabular text-xs text-[#F4F4F1]/40">03</span>
+                <span className="font-mono-tabular text-xs text-[#F4F4F1]/40">04</span>
               </a>
 
               <a
@@ -529,7 +555,7 @@ export const Header: React.FC<HeaderProps> = ({
                 }`}
               >
                 <span>{dict.header.about}</span>
-                <span className="font-mono-tabular text-xs text-[#F4F4F1]/40">04</span>
+                <span className="font-mono-tabular text-xs text-[#F4F4F1]/40">05</span>
               </a>
 
               <a
@@ -540,7 +566,7 @@ export const Header: React.FC<HeaderProps> = ({
                 }`}
               >
                 <span>{dict.header.contact}</span>
-                <span className="font-mono-tabular text-xs text-[#F4F4F1]/40">05</span>
+                <span className="font-mono-tabular text-xs text-[#F4F4F1]/40">06</span>
               </a>
 
               <div className="pt-5">

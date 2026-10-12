@@ -8,6 +8,7 @@ export const ptPT: TranslationDictionary = {
   header: {
     home: 'Início',
     services: 'Serviços',
+    investment: 'Investimento',
     cases: 'Casos',
     about: 'Sobre',
     contact: 'Contacto',
@@ -31,6 +32,7 @@ export const ptPT: TranslationDictionary = {
     contactTitle: 'Contacto',
     home: 'Início',
     services: 'Serviços',
+    investment: 'Investimento',
     about: 'Sobre',
     contact: 'Contacto',
     copyright: '© VULTO LAB 2026',

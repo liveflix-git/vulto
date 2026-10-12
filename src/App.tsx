@@ -14,6 +14,7 @@ import { AboutPage } from './pages/AboutPage';
 import { ContactPage } from './pages/ContactPage';
 import { ServicesPage } from './pages/ServicesPage';
 import { ServiceDetailPage } from './pages/ServiceDetailPage';
+import { InvestmentPage } from './pages/InvestmentPage';
 import { SERVICES_DATA } from './data/siteData';
 import { DashboardApp } from './dashboard/DashboardApp';
 import { LanguageProvider, useLanguage } from './context/LanguageContext';
@@ -96,6 +97,8 @@ function AppContent() {
       document.title = isPT
         ? 'Contacto | Vulto Lab — Vamos Construir o Próximo Resultado'
         : 'Contato | Vulto Lab — Vamos Construir o Próximo Resultado';
+    } else if (normalizedPath === '/investimento') {
+      document.title = 'Investimento & Soluções | Vulto Lab — Presença, Tráfego e NFC';
     } else if (normalizedPath === '/servicos') {
       document.title = 'Estrutura & Serviços | Vulto Lab';
     } else if (normalizedPath === '/dashboard/login') {
@@ -166,6 +169,10 @@ function AppContent() {
 
     if (normalizedPath === '/contato') {
       return <ContactPage initialService={preselectedService} />;
+    }
+
+    if (normalizedPath === '/investimento') {
+      return <InvestmentPage onNavigate={handleNavigate} />;
     }
 
     if (normalizedPath === '/servicos') {

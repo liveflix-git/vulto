@@ -91,6 +91,7 @@ export interface TranslationDictionary {
   header: {
     home: string;
     services: string;
+    investment: string;
     cases: string;
     about: string;
     contact: string;
@@ -113,6 +114,7 @@ export interface TranslationDictionary {
     contactTitle: string;
     home: string;
     services: string;
+    investment: string;
     about: string;
     contact: string;
     copyright: string;

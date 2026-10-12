@@ -63,6 +63,15 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate }) => {
               </li>
               <li>
                 <a
+                  href="/investimento"
+                  onClick={(e) => handleNav(e, '/investimento')}
+                  className="text-[#F4F4F1]/75 hover:text-[#C6FF00] transition-colors"
+                >
+                  {dict.footer.investment}
+                </a>
+              </li>
+              <li>
+                <a
                   href="/sobre"
                   onClick={(e) => handleNav(e, '/sobre')}
                   className="text-[#F4F4F1]/75 hover:text-[#C6FF00] transition-colors"
