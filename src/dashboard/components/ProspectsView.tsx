@@ -717,7 +717,10 @@ export function ProspectsView() {
           loadData();
         }
       } else {
-        const res = await createVultoProspect(payload);
+        const res = await createVultoProspect({
+          ...payload,
+          company_name: companyName.trim(),
+        });
         if (res.error) {
           setFormError(res.error);
         } else {

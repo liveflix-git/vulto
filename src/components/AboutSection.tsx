@@ -91,7 +91,7 @@ export const AboutSection: React.FC<AboutSectionProps> = ({
                     e.preventDefault();
                     onNavigate('/sobre');
                   }}
-                  className="inline-flex items-center gap-2 font-mono-tabular text-xs uppercase tracking-[0.16em] text-[#C6FF00] hover:underline underline-offset-4 whitespace-nowrap"
+                  className="inline-flex items-center gap-2 font-mono-tabular text-xs uppercase tracking-[0.16em] text-[#C6FF00] hover:underline underline-offset-4"
                 >
                   <span>{ab.ctaPhilosophy}</span>
                   <ArrowUpRight className="w-3.5 h-3.5" />
@@ -130,3 +130,4 @@ export const AboutSection: React.FC<AboutSectionProps> = ({
     </section>
   );
 };
+

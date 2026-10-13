@@ -704,7 +704,7 @@ export function ProjectsServicesView() {
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             {/* Filtros de Canal */}
             <div className="flex items-center gap-2 overflow-x-auto pb-1">
-              {(['ALL', 'WhatsApp', 'Instagram', 'Email'] as const).map((channel) => (
+              {(['ALL', 'WhatsApp', 'E-mail', 'Presencial'] as const).map((channel) => (
                 <button
                   key={channel}
                   onClick={() => setScriptChannelFilter(channel)}

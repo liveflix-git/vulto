@@ -6,6 +6,7 @@ import { ServicesEditorialList } from '../components/ServicesEditorialList';
 import { WhatWeDoSection } from '../components/WhatWeDoSection';
 import { DifferentialSection } from '../components/DifferentialSection';
 import { ProcessSection } from '../components/ProcessSection';
+import { OfficeSection } from '../components/OfficeSection';
 import { AboutSection } from '../components/AboutSection';
 import { ContactSection } from '../components/ContactSection';
 
@@ -24,8 +25,10 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate, currentLocale })
       <WhatWeDoSection />
       <DifferentialSection onNavigate={onNavigate} />
       <ProcessSection />
+      <OfficeSection onNavigate={onNavigate} />
       <AboutSection onNavigate={onNavigate} showMoreLink={true} />
       <ContactSection />
     </>
   );
 };
+
