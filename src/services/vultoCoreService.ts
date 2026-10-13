@@ -305,7 +305,7 @@ export interface VultoProspectingGoal {
 export interface VultoOperatorNote {
   id: string;
   operator_id: string;
-  slot: number; // 1, 2, 3, 4
+  slot: number; // 1 a 15
   title: string;
   content: string;
   created_at: string;
@@ -1752,7 +1752,7 @@ export async function fetchAllProspectsAndInteractions(): Promise<{
 
 // =====================================================================
 // MINHAS NOTAS DO OPERADOR (vulto_operator_notes)
-// 4 slots fixos por operador: operator_id + slot únicos
+// Até 15 slots por operador (1 a 15): operator_id + slot únicos
 // =====================================================================
 
 const LOCAL_NOTES_PREFIX = 'vulto_operator_notes_';
@@ -1830,12 +1830,12 @@ export async function saveOperatorNote(params: {
     return { success: false, error: 'Identificador do operador é obrigatório.' };
   }
 
-  if (params.slot < 1 || params.slot > 4) {
-    return { success: false, error: 'Slot inválido. Deve ser entre 1 e 4.' };
+  if (params.slot < 1 || params.slot > 15) {
+    return { success: false, error: 'Slot inválido. Deve ser entre 1 e 15.' };
   }
 
   const cleanTitle = (params.title || '').trim().slice(0, 80);
-  const cleanContent = (params.content || '').slice(0, 1000);
+  const cleanContent = (params.content || '').slice(0, 3000);
   const now = new Date().toISOString();
 
   if (isSupabaseConfigured) {
